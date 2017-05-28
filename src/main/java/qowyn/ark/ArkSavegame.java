@@ -14,6 +14,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -35,6 +37,8 @@ import qowyn.ark.types.EmbeddedData;
 import qowyn.ark.types.ObjectReference;
 
 public class ArkSavegame implements GameObjectContainer {
+
+  private static final Logger LOGGER = Logger.getLogger(ArkSavegame.class.getName());
 
   protected short saveVersion;
 
@@ -142,7 +146,7 @@ public class ArkSavegame implements GameObjectContainer {
     int unknownValue = archive.getInt();
     if (unknownValue != 0) {
       if (unknownValue > 1) {
-        throw new UnsupportedOperationException("Found unexpected Value " + unknownValue + " at " + (archive.position() - 4));
+        LOGGER.log(Level.WARNING, "Found unexpected Value " + unknownValue + " at " + (archive.position() - 4) + ", is this a modded save?");
       }
 
       for (int n = 0; n < unknownValue; n++) {
