@@ -25,6 +25,7 @@ public class StructRegistry {
   static {
     addStruct("ItemNetID", StructPropertyList::new, StructPropertyList::new);
     addStruct("Transform", StructPropertyList::new, StructPropertyList::new);
+    addStruct("ArkInventoryData", StructPropertyList::new, StructPropertyList::new);
     addStruct("PrimalPlayerDataStruct", StructPropertyList::new, StructPropertyList::new);
     addStruct("PrimalPlayerCharacterConfigStruct", StructPropertyList::new, StructPropertyList::new);
     addStruct("PrimalPersistentCharacterStatsStruct", StructPropertyList::new, StructPropertyList::new);
