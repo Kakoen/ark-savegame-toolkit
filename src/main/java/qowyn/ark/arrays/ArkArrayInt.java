@@ -9,46 +9,42 @@ import javax.json.JsonArrayBuilder;
 import javax.json.JsonNumber;
 
 import qowyn.ark.ArkArchive;
-import qowyn.ark.properties.UnreadablePropertyException;
+import qowyn.ark.properties.PropertyArray;
+import qowyn.ark.types.ArkName;
 
-/**
- *
- * @author Roland Firmont
- *
- */
-public class ArkArrayByte extends ArrayList<Byte> implements ArkArray<Byte> {
+public class ArkArrayInt extends ArrayList<Integer> implements ArkArray<Integer> {
 
-  /**
-   * 
-   */
+  public static final ArkName TYPE = ArkName.constantPlain("IntProperty");
+
   private static final long serialVersionUID = 1L;
 
-  public ArkArrayByte() {}
+  public ArkArrayInt() {}
 
-  public ArkArrayByte(ArkArchive archive, int dataSize) {
+  public ArkArrayInt(ArkArchive archive, PropertyArray property) {
     int size = archive.getInt();
-    
-    if (size + 4 != dataSize) {
-      throw new UnreadablePropertyException();
-    }
 
     for (int n = 0; n < size; n++) {
-      add(archive.getByte());
+      add(archive.getInt());
     }
   }
 
-  public ArkArrayByte(JsonArray a, int dataSize) {
-    a.getValuesAs(JsonNumber.class).forEach(n -> this.add((byte) n.intValue()));
+  public ArkArrayInt(JsonArray a, PropertyArray property) {
+    a.getValuesAs(JsonNumber.class).forEach(n -> this.add(n.intValue()));
   }
 
   @Override
-  public Class<Byte> getValueClass() {
-    return Byte.class;
+  public Class<Integer> getValueClass() {
+    return Integer.class;
+  }
+
+  @Override
+  public ArkName getType() {
+    return TYPE;
   }
 
   @Override
   public int calculateSize(boolean nameTable) {
-    return Integer.BYTES + size() * Byte.BYTES;
+    return Integer.BYTES + size() * Integer.BYTES;
   }
 
   @Override
@@ -64,7 +60,7 @@ public class ArkArrayByte extends ArrayList<Byte> implements ArkArray<Byte> {
   public void write(ArkArchive archive) {
     archive.putInt(size());
 
-    this.forEach(archive::putByte);
+    this.forEach(archive::putInt);
   }
 
   @Override

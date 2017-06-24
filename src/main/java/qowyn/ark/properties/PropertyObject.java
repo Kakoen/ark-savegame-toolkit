@@ -6,20 +6,23 @@ import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.types.ArkName;
 import qowyn.ark.types.ObjectReference;
 
 public class PropertyObject extends PropertyBase<ObjectReference> {
 
-  public PropertyObject(String name, String typeName, ObjectReference value) {
-    super(name, typeName, 0, value);
+  public static final ArkName TYPE = ArkName.constantPlain("ObjectProperty");
+
+  public PropertyObject(String name, ObjectReference value) {
+    super(ArkName.from(name), 0, value);
   }
 
-  public PropertyObject(String name, String typeName, int index, ObjectReference value) {
-    super(name, typeName, index, value);
+  public PropertyObject(String name, int index, ObjectReference value) {
+    super(ArkName.from(name), index, value);
   }
 
-  public PropertyObject(ArkArchive archive, PropertyArgs args) {
-    super(archive, args);
+  public PropertyObject(ArkArchive archive, ArkName name) {
+    super(archive, name);
     value = new ObjectReference(archive, dataSize);
   }
 
@@ -34,13 +37,8 @@ public class PropertyObject extends PropertyBase<ObjectReference> {
   }
 
   @Override
-  public ObjectReference getValue() {
-    return value;
-  }
-
-  @Override
-  public void setValue(ObjectReference value) {
-    this.value = value;
+  public ArkName getType() {
+    return TYPE;
   }
 
   @Override
@@ -67,11 +65,6 @@ public class PropertyObject extends PropertyBase<ObjectReference> {
   public void collectNames(Set<String> nameTable) {
     super.collectNames(nameTable);
     value.collectNames(nameTable);
-  }
-
-  @Override
-  public String toString() {
-    return "PropertyObject [value=" + value + ", name=" + name + ", typeName=" + typeName + ", dataSize=" + dataSize + ", index=" + index + "]";
   }
 
 }

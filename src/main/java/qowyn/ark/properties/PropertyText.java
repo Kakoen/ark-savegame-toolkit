@@ -6,23 +6,26 @@ import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.types.ArkName;
 
 public class PropertyText extends PropertyBase<String> {
-  
+
+  public static final ArkName TYPE = ArkName.constantPlain("TextProperty");
+
   private static final Base64.Decoder DECODER = Base64.getDecoder();
-  
+
   private static final Base64.Encoder ENCODER = Base64.getEncoder();
 
-  public PropertyText(String name, String typeName, String value) {
-    super(name, typeName, 0, value);
+  public PropertyText(String name, String value) {
+    super(ArkName.from(name), 0, value);
   }
 
-  public PropertyText(String name, String typeName, int index, String value) {
-    super(name, typeName, index, value);
+  public PropertyText(String name, int index, String value) {
+    super(ArkName.from(name), index, value);
   }
 
-  public PropertyText(ArkArchive archive, PropertyArgs args) {
-    super(archive, args);
+  public PropertyText(ArkArchive archive, ArkName name) {
+    super(archive, name);
     value = ENCODER.encodeToString(archive.getBytes(dataSize));
   }
 
@@ -36,13 +39,9 @@ public class PropertyText extends PropertyBase<String> {
     return String.class;
   }
 
-  public String getValue() {
-    return value;
-  }
-
   @Override
-  public void setValue(String value) {
-    this.value = value;
+  public ArkName getType() {
+    return TYPE;
   }
 
   @Override

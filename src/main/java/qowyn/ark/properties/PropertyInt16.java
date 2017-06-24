@@ -4,19 +4,22 @@ import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.types.ArkName;
 
 public class PropertyInt16 extends PropertyBase<Short> {
 
-  public PropertyInt16(String name, String typeName, short value) {
-    super(name, typeName, 0, value);
+  public static final ArkName TYPE = ArkName.constantPlain("Int16Property");
+
+  public PropertyInt16(String name, short value) {
+    super(ArkName.from(name), 0, value);
   }
 
-  public PropertyInt16(String name, String typeName, int index, short value) {
-    super(name, typeName, index, value);
+  public PropertyInt16(String name, int index, short value) {
+    super(ArkName.from(name), index, value);
   }
 
-  public PropertyInt16(ArkArchive archive, PropertyArgs args) {
-    super(archive, args);
+  public PropertyInt16(ArkArchive archive, ArkName name) {
+    super(archive, name);
     value = archive.getShort();
   }
 
@@ -31,13 +34,8 @@ public class PropertyInt16 extends PropertyBase<Short> {
   }
 
   @Override
-  public Short getValue() {
-    return value;
-  }
-
-  @Override
-  public void setValue(Short value) {
-    this.value = value;
+  public ArkName getType() {
+    return TYPE;
   }
 
   @Override

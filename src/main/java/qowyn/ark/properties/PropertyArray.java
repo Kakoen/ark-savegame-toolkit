@@ -4,50 +4,59 @@ import java.util.Set;
 
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
+import javax.json.JsonValue.ValueType;
 
 import qowyn.ark.ArkArchive;
 import qowyn.ark.arrays.ArkArray;
 import qowyn.ark.arrays.ArkArrayRegistry;
+import qowyn.ark.arrays.ArkArrayStruct;
+import qowyn.ark.arrays.ArkArrayUnknown;
 import qowyn.ark.types.ArkName;
 
 public class PropertyArray extends PropertyBase<ArkArray<?>> {
 
-  private ArkName arrayType;
+  public static final ArkName TYPE = ArkName.constantPlain("ArrayProperty");
 
-  public PropertyArray(String name, String typeName, ArkArray<?> value, ArkName arrayType) {
-    super(name, typeName, 0, value);
-    this.arrayType = arrayType;
+  public PropertyArray(String name, ArkArray<?> value) {
+    super(ArkName.from(name), 0, value);
   }
 
-  public PropertyArray(String name, String typeName, int index, ArkArray<?> value, ArkName arrayType) {
-    super(name, typeName, index, value);
-    this.arrayType = arrayType;
+  public PropertyArray(String name, int index, ArkArray<?> value) {
+    super(ArkName.from(name), index, value);
   }
 
-  public PropertyArray(ArkArchive archive, PropertyArgs args) {
-    super(archive, args);
-    arrayType = archive.getName();
+  public PropertyArray(ArkArchive archive, ArkName name) {
+    super(archive, name);
+    ArkName arrayType = archive.getName();
 
     int position = archive.position();
 
     try {
-      value = ArkArrayRegistry.read(archive, arrayType, dataSize);
+      value = ArkArrayRegistry.read(archive, arrayType, this);
 
       if (value == null) {
-        throw new UnreadablePropertyException();
+        throw new UnreadablePropertyException("ArkArrayRegistry returned null");
       }
     } catch (UnreadablePropertyException upe) {
-      archive.position(position + dataSize);
-      System.err.println("Warning: Unreadable ArrayProperty with name " + name + ", skipping.");
-      throw new UnreadablePropertyException();
+      archive.position(position);
+
+      value = new ArkArrayUnknown(archive, dataSize, arrayType);
+
+      archive.unknownNames();
+      System.err.println("Reading ArrayProperty of type " + arrayType + " with name " + name + " as byte blob because:");
+      upe.printStackTrace();
     }
   }
 
   public PropertyArray(JsonObject o) {
     super(o);
-    arrayType = new ArkName(o.getString("arrayType"));
+    ArkName arrayType = ArkName.from(o.getString("arrayType"));
 
-    value = ArkArrayRegistry.read(o.getJsonArray("value"), arrayType, dataSize);
+    if (o.get("value").getValueType() == ValueType.STRING) {
+      value = new ArkArrayUnknown(o.getString("value"), arrayType);
+    } else {
+      value = ArkArrayRegistry.read(o.getJsonArray("value"), arrayType, this);
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -57,8 +66,8 @@ public class PropertyArray extends PropertyBase<ArkArray<?>> {
   }
 
   @Override
-  public ArkArray<?> getValue() {
-    return value;
+  public ArkName getType() {
+    return TYPE;
   }
 
   @SuppressWarnings("unchecked")
@@ -72,25 +81,20 @@ public class PropertyArray extends PropertyBase<ArkArray<?>> {
   }
 
   @Override
-  public void setValue(ArkArray<?> value) {
-    this.value = value;
-  }
-
-  @Override
   protected void serializeValue(JsonObjectBuilder job) {
-    job.add("arrayType", arrayType.toString());
+    job.add("arrayType", value.getType().toString());
     job.add("value", value.toJson());
   }
 
   @Override
   protected void writeValue(ArkArchive archive) {
-    archive.putName(arrayType);
+    archive.putName(value.getType());
     value.write(archive);
   }
 
   @Override
   protected int calculateAdditionalSize(boolean nameTable) {
-    return ArkArchive.getNameLength(arrayType, nameTable);
+    return ArkArchive.getNameLength(value.getType(), nameTable);
   }
 
   @Override
@@ -101,8 +105,13 @@ public class PropertyArray extends PropertyBase<ArkArray<?>> {
   @Override
   public void collectNames(Set<String> nameTable) {
     super.collectNames(nameTable);
-    nameTable.add(arrayType.getNameString());
+    nameTable.add(value.getType().getName());
     value.collectNames(nameTable);
+  }
+
+  @Override
+  protected boolean isDataSizeNeeded() {
+    return value instanceof ArkArrayStruct;
   }
 
 }

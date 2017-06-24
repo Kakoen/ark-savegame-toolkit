@@ -4,19 +4,22 @@ import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.types.ArkName;
 
 public class PropertyInt64 extends PropertyBase<Long> {
 
-  public PropertyInt64(String name, String typeName, long value) {
-    super(name, typeName, 0, value);
+  public static final ArkName TYPE = ArkName.constantPlain("Int64Property");
+
+  public PropertyInt64(String name, long value) {
+    super(ArkName.from(name), 0, value);
   }
 
-  public PropertyInt64(String name, String typeName, int index, long value) {
-    super(name, typeName, index, value);
+  public PropertyInt64(String name, int index, long value) {
+    super(ArkName.from(name), index, value);
   }
 
-  public PropertyInt64(ArkArchive archive, PropertyArgs args) {
-    super(archive, args);
+  public PropertyInt64(ArkArchive archive, ArkName name) {
+    super(archive, name);
     value = archive.getLong();
   }
 
@@ -31,13 +34,8 @@ public class PropertyInt64 extends PropertyBase<Long> {
   }
 
   @Override
-  public Long getValue() {
-    return value;
-  }
-
-  @Override
-  public void setValue(Long value) {
-    this.value = value;
+  public ArkName getType() {
+    return TYPE;
   }
 
   @Override

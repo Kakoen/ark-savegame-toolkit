@@ -10,22 +10,24 @@ import qowyn.ark.types.ArkName;
 
 public class PropertyName extends PropertyBase<ArkName> {
 
-  public PropertyName(String name, String typeName, ArkName value) {
-    super(name, typeName, 0, value);
+  public static final ArkName TYPE = ArkName.constantPlain("NameProperty");
+
+  public PropertyName(String name, ArkName value) {
+    super(ArkName.from(name), 0, value);
   }
 
-  public PropertyName(String name, String typeName, int index, ArkName value) {
-    super(name, typeName, index, value);
+  public PropertyName(String name, int index, ArkName value) {
+    super(ArkName.from(name), index, value);
   }
 
-  public PropertyName(ArkArchive archive, PropertyArgs args) {
-    super(archive, args);
+  public PropertyName(ArkArchive archive, ArkName name) {
+    super(archive, name);
     value = archive.getName();
   }
 
   public PropertyName(JsonObject o) {
     super(o);
-    value = new ArkName(o.getString("value"));
+    value = ArkName.from(o.getString("value"));
   }
 
   @Override
@@ -33,13 +35,9 @@ public class PropertyName extends PropertyBase<ArkName> {
     return ArkName.class;
   }
 
-  public ArkName getValue() {
-    return value;
-  }
-
   @Override
-  public void setValue(ArkName value) {
-    this.value = value;
+  public ArkName getType() {
+    return TYPE;
   }
 
   @Override
@@ -60,7 +58,7 @@ public class PropertyName extends PropertyBase<ArkName> {
   @Override
   public void collectNames(Set<String> nameTable) {
     super.collectNames(nameTable);
-    nameTable.add(value.getNameString());
+    nameTable.add(value.getName());
   }
 
 }

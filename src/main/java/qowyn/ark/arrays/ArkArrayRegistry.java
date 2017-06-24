@@ -2,69 +2,56 @@ package qowyn.ark.arrays;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.BiFunction;
 
 import javax.json.JsonArray;
 
 import qowyn.ark.ArkArchive;
 import qowyn.ark.properties.PropertyArray;
-import qowyn.ark.properties.PropertyBool;
-import qowyn.ark.properties.PropertyByte;
-import qowyn.ark.properties.PropertyDouble;
-import qowyn.ark.properties.PropertyFloat;
-import qowyn.ark.properties.PropertyInt16;
-import qowyn.ark.properties.PropertyInt32;
-import qowyn.ark.properties.PropertyInt64;
-import qowyn.ark.properties.PropertyInt8;
-import qowyn.ark.properties.PropertyName;
-import qowyn.ark.properties.PropertyObject;
-import qowyn.ark.properties.PropertyStr;
-import qowyn.ark.properties.PropertyStruct;
+import qowyn.ark.properties.UnreadablePropertyException;
 import qowyn.ark.types.ArkName;
 
 public final class ArkArrayRegistry {
 
-  public static final Map<ArkName, BiFunction<ArkArchive, Integer, ArkArray<?>>> ARRAY_TYPE_MAP = new HashMap<>();
+  public static final Map<ArkName, ArkArrayBinaryConstructor> ARRAY_TYPE_MAP = new HashMap<>();
 
-  public static final Map<ArkName, BiFunction<JsonArray, Integer, ArkArray<?>>> ARRAY_JSON_TYPE_MAP = new HashMap<>();
+  public static final Map<ArkName, ArkArrayJsonConstructor> ARRAY_JSON_TYPE_MAP = new HashMap<>();
 
-  public static void addArray(String name, BiFunction<ArkArchive, Integer, ArkArray<?>> binary, BiFunction<JsonArray, Integer, ArkArray<?>> json) {
-    ARRAY_TYPE_MAP.put(new ArkName(name), binary);
-    ARRAY_JSON_TYPE_MAP.put(new ArkName(name), json);
+  public static void addArray(ArkName name, ArkArrayBinaryConstructor binary, ArkArrayJsonConstructor json) {
+    ARRAY_TYPE_MAP.put(name, binary);
+    ARRAY_JSON_TYPE_MAP.put(name, json);
   }
 
   static {
-    addArray("ObjectProperty", ArkArrayObjectReference::new, ArkArrayObjectReference::new);
-    addArray("StructProperty", ArkArrayStruct::new, ArkArrayStruct::new);
-    addArray("UInt32Property", ArkArrayInteger::new, ArkArrayInteger::new);
-    addArray("IntProperty", ArkArrayInteger::new, ArkArrayInteger::new);
-    addArray("UInt16Property", ArkArrayInt16::new, ArkArrayInt16::new);
-    addArray("Int16Property", ArkArrayInt16::new, ArkArrayInt16::new);
-    addArray("ByteProperty", ArkArrayByte::new, ArkArrayByte::new);
-    addArray("Int8Property", ArkArrayInt8::new, ArkArrayInt8::new);
-    addArray("StrProperty", ArkArrayString::new, ArkArrayString::new);
-    addArray("UInt64Property", ArkArrayLong::new, ArkArrayLong::new);
-    addArray("BoolProperty", ArkArrayBool::new, ArkArrayBool::new);
-    addArray("FloatProperty", ArkArrayFloat::new, ArkArrayFloat::new);
-    addArray("DoubleProperty", ArkArrayDouble::new, ArkArrayDouble::new);
-    addArray("NameProperty", ArkArrayName::new, ArkArrayName::new);
+    addArray(ArkArrayInt8.TYPE, ArkArrayInt8::new, ArkArrayInt8::new);
+    addArray(ArkArrayByteHandler.TYPE, ArkArrayByteHandler::create, ArkArrayByteHandler::create);
+    addArray(ArkArrayInt16.TYPE, ArkArrayInt16::new, ArkArrayInt16::new);
+    addArray(ArkArrayUInt16.TYPE, ArkArrayUInt16::new, ArkArrayUInt16::new);
+    addArray(ArkArrayInt.TYPE, ArkArrayInt::new, ArkArrayInt::new);
+    addArray(ArkArrayUInt32.TYPE, ArkArrayUInt32::new, ArkArrayUInt32::new);
+    addArray(ArkArrayInt64.TYPE, ArkArrayInt64::new, ArkArrayInt64::new);
+    addArray(ArkArrayUInt64.TYPE, ArkArrayUInt64::new, ArkArrayUInt64::new);
+    addArray(ArkArrayFloat.TYPE, ArkArrayFloat::new, ArkArrayFloat::new);
+    addArray(ArkArrayDouble.TYPE, ArkArrayDouble::new, ArkArrayDouble::new);
+    addArray(ArkArrayBool.TYPE, ArkArrayBool::new, ArkArrayBool::new);
+    addArray(ArkArrayString.TYPE, ArkArrayString::new, ArkArrayString::new);
+    addArray(ArkArrayName.TYPE, ArkArrayName::new, ArkArrayName::new);
+    addArray(ArkArrayObjectReference.TYPE, ArkArrayObjectReference::new, ArkArrayObjectReference::new);
+    addArray(ArkArrayStruct.TYPE, ArkArrayStruct::new, ArkArrayStruct::new);
   }
 
-  public static ArkArray<?> read(ArkArchive archive, ArkName arrayType, int size) {
+  public static ArkArray<?> read(ArkArchive archive, ArkName arrayType, PropertyArray property) {
     if (ARRAY_TYPE_MAP.containsKey(arrayType)) {
-      return ARRAY_TYPE_MAP.get(arrayType).apply(archive, size);
+      return ARRAY_TYPE_MAP.get(arrayType).apply(archive, property);
     } else {
-      System.err.println("Warning: Unknown Array Type " + arrayType + " at " + Integer.toHexString(archive.position()));
-      return null;
+      throw new UnreadablePropertyException("Unknown Array Type " + arrayType + " at " + Integer.toHexString(archive.position()));
     }
   }
 
-  public static ArkArray<?> read(JsonArray a, ArkName arrayType, int size) {
+  public static ArkArray<?> read(JsonArray a, ArkName arrayType, PropertyArray property) {
     if (ARRAY_JSON_TYPE_MAP.containsKey(arrayType)) {
-      return ARRAY_JSON_TYPE_MAP.get(arrayType).apply(a, size);
+      return ARRAY_JSON_TYPE_MAP.get(arrayType).apply(a, property);
     } else {
-      System.err.println("Warning: Unknown Array Type " + arrayType);
-      return null;
+      throw new UnreadablePropertyException("Unknown Array Type " + arrayType);
     }
   }
 

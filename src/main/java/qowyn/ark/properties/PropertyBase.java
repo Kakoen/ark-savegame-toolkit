@@ -14,31 +14,26 @@ public abstract class PropertyBase<T> implements Property<T> {
 
   protected ArkName name;
 
-  protected ArkName typeName;
-
   protected int dataSize;
 
   protected int index;
 
   protected T value;
 
-  public PropertyBase(String name, String typeName, int index, T value) {
-    this.name = new ArkName(name);
-    this.typeName = new ArkName(typeName);
+  public PropertyBase(ArkName name, int index, T value) {
+    this.name = name;
     this.index = index;
     this.value = value;
   }
 
-  public PropertyBase(ArkArchive archive, PropertyArgs args) {
-    name = args.getName();
-    typeName = args.getTypeName();
+  public PropertyBase(ArkArchive archive, ArkName name) {
+    this.name = name;
     dataSize = archive.getInt();
     index = archive.getInt();
   }
 
   public PropertyBase(JsonObject o) {
-    name = new ArkName(o.getString("name"));
-    typeName = new ArkName(o.getString("type"));
+    name = ArkName.from(o.getString("name"));
     dataSize = o.getInt("size", 0);
     index = o.getInt("index", 0);
   }
@@ -60,27 +55,12 @@ public abstract class PropertyBase<T> implements Property<T> {
 
   @Override
   public void setNameString(String nameString) {
-    name = new ArkName(nameString);
-  }
-
-  @Override
-  public ArkName getTypeName() {
-    return typeName;
-  }
-
-  @Override
-  public void setTypeName(ArkName typeName) {
-    this.typeName = typeName;
+    name = ArkName.from(nameString);
   }
 
   @Override
   public String getTypeString() {
-    return typeName.toString();
-  }
-
-  @Override
-  public void setTypeString(String typeString) {
-    this.typeName = new ArkName(typeString);
+    return getType().toString();
   }
 
   @Override
@@ -119,7 +99,7 @@ public abstract class PropertyBase<T> implements Property<T> {
     int size = Integer.BYTES * 2;
 
     size += ArkArchive.getNameLength(name, nameTable);
-    size += ArkArchive.getNameLength(typeName, nameTable);
+    size += ArkArchive.getNameLength(getType(), nameTable);
     size += calculateAdditionalSize(nameTable);
     size += calculateDataSize(nameTable);
 
@@ -142,7 +122,7 @@ public abstract class PropertyBase<T> implements Property<T> {
     JsonObjectBuilder job = Json.createObjectBuilder();
 
     job.add("name", name.toString());
-    job.add("type", typeName.toString());
+    job.add("type", getType().toString());
     if (isDataSizeNeeded()) {
       JsonHelper.addInt(job, "size", dataSize);
     }
@@ -158,7 +138,7 @@ public abstract class PropertyBase<T> implements Property<T> {
   @Override
   public void write(ArkArchive archive) {
     archive.putName(name);
-    archive.putName(typeName);
+    archive.putName(getType());
     archive.putInt(calculateDataSize(archive.hasNameTable()));
     archive.putInt(index);
 
@@ -166,8 +146,23 @@ public abstract class PropertyBase<T> implements Property<T> {
   }
 
   public void collectNames(Set<String> nameTable) {
-    nameTable.add(name.getNameString());
-    nameTable.add(typeName.getNameString());
+    nameTable.add(name.getName());
+    nameTable.add(getType().getName());
+  }
+
+  @Override
+  public T getValue() {
+    return value;
+  }
+
+  @Override
+  public void setValue(T value) {
+    this.value = value;
+  }
+
+  @Override
+  public String toString() {
+    return getClass().getSimpleName() + " [value=" + value + ", name=" + name + ", dataSize=" + dataSize + ", index=" + index + "]";
   }
 
 }

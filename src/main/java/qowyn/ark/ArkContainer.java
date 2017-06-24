@@ -7,7 +7,6 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.List;
 
 import javax.json.Json;
 import javax.json.JsonArray;
@@ -17,11 +16,12 @@ import javax.json.JsonStructure;
 import javax.json.JsonValue.ValueType;
 import javax.json.stream.JsonGenerator;
 
-import qowyn.ark.arrays.ArkArrayByte;
+import qowyn.ark.arrays.ArkArrayInt8;
+import qowyn.ark.arrays.ArkArrayUInt8;
 
 public class ArkContainer implements GameObjectContainer {
 
-  private final List<GameObject> objects = new ArrayList<>();
+  private final ArrayList<GameObject> objects = new ArrayList<>();
 
   public ArkContainer() {}
 
@@ -52,7 +52,18 @@ public class ArkContainer implements GameObjectContainer {
     }
   }
 
-  public ArkContainer(ArkArrayByte source) {
+  public ArkContainer(ArkArrayUInt8 source) {
+    ByteBuffer buffer = ByteBuffer.allocateDirect(source.size());
+
+    source.forEach(buffer::put);
+
+    buffer.clear();
+
+    ArkArchive archive = new ArkArchive(buffer);
+    readBinary(archive);
+  }
+
+  public ArkContainer(ArkArrayInt8 source) {
     ByteBuffer buffer = ByteBuffer.allocateDirect(source.size());
 
     source.forEach(buffer::put);
@@ -166,11 +177,11 @@ public class ArkContainer implements GameObjectContainer {
     return jab.build();
   }
 
-  public List<GameObject> getObjects() {
+  public ArrayList<GameObject> getObjects() {
     return objects;
   }
 
-  public ArkArrayByte toByteArray() {
+  private ByteBuffer toBuffer() {
     int size = Integer.BYTES;
 
     size += objects.stream().mapToInt(object -> object.getSize(false)).sum();
@@ -192,11 +203,32 @@ public class ArkContainer implements GameObjectContainer {
       object.writeProperties(archive, 0);
     }
 
-    ArkArrayByte result = new ArkArrayByte();
+    return buffer;
+    
+  }
+
+  public ArkArrayUInt8 toByteArray() {
+    ByteBuffer buffer = toBuffer();
+
+    ArkArrayUInt8 result = new ArkArrayUInt8();
 
     buffer.clear();
 
-    for (int n = 0; n < size; n++) {
+    for (int n = 0; n < buffer.capacity(); n++) {
+      result.add(buffer.get());
+    }
+
+    return result;
+  }
+
+  public ArkArrayInt8 toSignedByteArray() {
+    ByteBuffer buffer = toBuffer();
+
+    ArkArrayInt8 result = new ArkArrayInt8();
+
+    buffer.clear();
+
+    for (int n = 0; n < buffer.capacity(); n++) {
       result.add(buffer.get());
     }
 

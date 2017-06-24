@@ -18,6 +18,7 @@ import javax.json.JsonString;
 import javax.json.JsonValue;
 
 import qowyn.ark.data.ExtraData;
+import qowyn.ark.data.ExtraDataBlob;
 import qowyn.ark.data.ExtraDataRegistry;
 import qowyn.ark.properties.Property;
 import qowyn.ark.properties.PropertyRegistry;
@@ -43,9 +44,9 @@ public class GameObject implements PropertyContainer, NameContainer {
 
   private List<ArkName> names;
 
-  private boolean unkBool;
+  private boolean fromDataFile;
 
-  private int unkIndex; // Related to unkBool
+  private int dataFileIndex;
 
   private LocationData locationData;
 
@@ -98,7 +99,7 @@ public class GameObject implements PropertyContainer, NameContainer {
   }
 
   public void setClassString(String classString) {
-    className = new ArkName(classString);
+    className = ArkName.from(classString);
   }
 
   public boolean isItem() {
@@ -117,20 +118,20 @@ public class GameObject implements PropertyContainer, NameContainer {
     this.names = names;
   }
 
-  public boolean isUnkBool() {
-    return unkBool;
+  public boolean isFromDataFile() {
+    return fromDataFile;
   }
 
-  public void setUnkBool(boolean unkBool) {
-    this.unkBool = unkBool;
+  public void setFromDataFile(boolean fromDataFile) {
+    this.fromDataFile = fromDataFile;
   }
 
-  public int getUnkIndex() {
-    return unkIndex;
+  public int getDataFileIndex() {
+    return dataFileIndex;
   }
 
-  public void setUnkIndex(int unkIndex) {
-    this.unkIndex = unkIndex;
+  public void setDataFileIndex(int dataFileIndex) {
+    this.dataFileIndex = dataFileIndex;
   }
 
   public LocationData getLocation() {
@@ -164,7 +165,7 @@ public class GameObject implements PropertyContainer, NameContainer {
       properties.forEach(p -> p.write(archive));
     }
 
-    archive.putName(Property.NONE_NAME);
+    archive.putName(ArkName.NAME_NONE);
 
     if (extraData != null) {
       extraData.write(archive);
@@ -173,16 +174,16 @@ public class GameObject implements PropertyContainer, NameContainer {
 
   public void fromJson(JsonObject o, boolean loadProperties) {
     uuid = UUID.fromString(o.getString("uuid", NULL_UUID_STRING));
-    className = new ArkName(o.getString("class", ""));
+    className = ArkName.from(o.getString("class", ""));
     item = o.getBoolean("item", false);
 
     JsonArray nameArray = o.getJsonArray("names");
     if (nameArray != null) {
-      names = nameArray.getValuesAs(JsonString.class).stream().map(s -> new ArkName(s.getString())).collect(Collectors.toList());
+      names = nameArray.getValuesAs(JsonString.class).stream().map(s -> ArkName.from(s.getString())).collect(Collectors.toList());
     }
 
-    unkBool = o.getBoolean("unkBool", false);
-    unkIndex = o.getInt("unkIndex", 0);
+    fromDataFile = o.getBoolean("fromDataFile", false);
+    dataFileIndex = o.getInt("dataFileIndex", 0);
 
     JsonObject locData = o.getJsonObject("location");
     if (locData != null) {
@@ -232,12 +233,12 @@ public class GameObject implements PropertyContainer, NameContainer {
       job.add("names", namesArray);
     }
 
-    if (unkBool) {
-      job.add("unkBool", unkBool);
+    if (fromDataFile) {
+      job.add("fromDataFile", fromDataFile);
     }
 
-    if (unkIndex != 0) {
-      job.add("unkIndex", unkIndex);
+    if (dataFileIndex != 0) {
+      job.add("dataFileIndex", dataFileIndex);
     }
 
     if (locationData != null) {
@@ -276,7 +277,7 @@ public class GameObject implements PropertyContainer, NameContainer {
   }
 
   public int getPropertiesSize(boolean nameTable) {
-    int size = ArkArchive.getNameLength(Property.NONE_NAME, nameTable);
+    int size = ArkArchive.getNameLength(ArkName.NAME_NONE, nameTable);
 
     size += properties.stream().mapToInt(p -> p.calculateSize(nameTable)).sum();
 
@@ -304,16 +305,12 @@ public class GameObject implements PropertyContainer, NameContainer {
       names.add(archive.getName());
     }
 
-    unkBool = archive.getBoolean();
-    unkIndex = archive.getInt();
+    fromDataFile = archive.getBoolean();
+    dataFileIndex = archive.getInt();
 
-    int countLocationData = archive.getInt();
+    boolean hasLocationData = archive.getBoolean();
 
-    if (countLocationData > 1) {
-      System.err.print("countLocationData > 1 at " + Integer.toHexString(archive.position() - 4));
-    }
-
-    if (countLocationData != 0) {
+    if (hasLocationData) {
       locationData = new LocationData(archive);
     }
 
@@ -322,6 +319,7 @@ public class GameObject implements PropertyContainer, NameContainer {
     int shouldBeZero = archive.getInt();
     if (shouldBeZero != 0) {
       System.err.println("Expected int after propertiesOffset to be 0 but found " + shouldBeZero + " at " + Integer.toHexString(archive.position() - 4));
+      archive.unknownData();
     }
   }
 
@@ -330,17 +328,27 @@ public class GameObject implements PropertyContainer, NameContainer {
     int nextOffset = (next != null) ? propertiesBlockOffset + next.propertiesOffset : archive.limit();
 
     archive.position(offset);
+    int position = offset;
 
     properties.clear();
     try {
       Property<?> property = PropertyRegistry.readProperty(archive);
 
       while (property != null) {
+        position = archive.position();
         properties.add(property);
         property = PropertyRegistry.readProperty(archive);
       }
     } catch (UnreadablePropertyException upe) {
-      // Stop reading and ignore possible extra data for now, needs a new field in ExtraDataHandler
+      archive.unknownNames();
+
+      archive.position(position);
+      ExtraDataBlob blob = new ExtraDataBlob();
+      blob.setData(archive.getBytes(nextOffset - position));
+      extraData = blob;
+
+      System.err.println("Error while reading property at " + Integer.toHexString(position) + " from GameObject " + id + " caused by:");
+      upe.printStackTrace();
       return;
     }
 
@@ -372,14 +380,14 @@ public class GameObject implements PropertyContainer, NameContainer {
       archive.putInt(0);
     }
 
-    archive.putBoolean(unkBool);
-    archive.putInt(unkIndex);
+    archive.putBoolean(fromDataFile);
+    archive.putInt(dataFileIndex);
 
     if (locationData != null) {
-      archive.putInt(1);
+      archive.putBoolean(true);
       locationData.write(archive);
     } else {
-      archive.putInt(0);
+      archive.putBoolean(false);
     }
 
     propertiesOffset = offset;
@@ -390,10 +398,10 @@ public class GameObject implements PropertyContainer, NameContainer {
   }
 
   public void collectNames(Set<String> nameTable) {
-    nameTable.add(className.getNameString());
+    nameTable.add(className.getName());
 
     if (names != null) {
-      names.forEach(name -> nameTable.add(name.getNameString()));
+      names.forEach(name -> nameTable.add(name.getName()));
     }
 
     properties.forEach(property -> property.collectNames(nameTable));

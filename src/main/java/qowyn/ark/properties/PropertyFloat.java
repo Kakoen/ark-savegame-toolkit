@@ -8,19 +8,22 @@ import javax.json.JsonValue;
 import javax.json.JsonValue.ValueType;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.types.ArkName;
 
 public class PropertyFloat extends PropertyBase<Float> {
 
-  public PropertyFloat(String name, String typeName, float value) {
-    super(name, typeName, 0, value);
+  public static final ArkName TYPE = ArkName.constantPlain("FloatProperty");
+
+  public PropertyFloat(String name, float value) {
+    super(ArkName.from(name), 0, value);
   }
 
-  public PropertyFloat(String name, String typeName, int index, float value) {
-    super(name, typeName, index, value);
+  public PropertyFloat(String name, int index, float value) {
+    super(ArkName.from(name), index, value);
   }
 
-  public PropertyFloat(ArkArchive archive, PropertyArgs args) {
-    super(archive, args);
+  public PropertyFloat(ArkArchive archive, ArkName name) {
+    super(archive, name);
     value = archive.getFloat();
   }
 
@@ -42,13 +45,8 @@ public class PropertyFloat extends PropertyBase<Float> {
   }
 
   @Override
-  public Float getValue() {
-    return value;
-  }
-
-  @Override
-  public void setValue(Float value) {
-    this.value = value;
+  public ArkName getType() {
+    return TYPE;
   }
 
   @Override

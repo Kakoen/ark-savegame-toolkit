@@ -8,10 +8,6 @@ import qowyn.ark.types.ArkName;
 
 public interface Property<T> extends NameContainer {
 
-  public static final ArkName NONE_NAME = new ArkName("None");
-
-  public static final ArkName EMPTY_NAME = new ArkName("");
-
   public Class<T> getValueClass();
 
   public ArkName getName();
@@ -22,13 +18,9 @@ public interface Property<T> extends NameContainer {
 
   public void setNameString(String nameString);
 
-  public ArkName getTypeName();
+  public ArkName getType();
 
   public String getTypeString();
-
-  public void setTypeName(ArkName typeName);
-
-  public void setTypeString(String typeString);
 
   public int getDataSize();
 

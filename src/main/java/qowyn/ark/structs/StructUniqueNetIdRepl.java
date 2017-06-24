@@ -6,7 +6,6 @@ import javax.json.JsonObjectBuilder;
 import javax.json.JsonValue;
 
 import qowyn.ark.ArkArchive;
-import qowyn.ark.types.ArkName;
 
 public class StructUniqueNetIdRepl extends StructBase {
 
@@ -14,27 +13,20 @@ public class StructUniqueNetIdRepl extends StructBase {
 
   private String netId;
 
-  public StructUniqueNetIdRepl(ArkName structType) {
-    super(structType);
-  }
+  public StructUniqueNetIdRepl() {}
 
-  public StructUniqueNetIdRepl(ArkName structType, int unk, String netId) {
-    super(structType);
+  public StructUniqueNetIdRepl(int unk, String netId) {
     this.unk = unk;
     this.netId = netId;
   }
 
-  public StructUniqueNetIdRepl(ArkArchive archive, ArkName structType) {
-    super(structType);
-
+  public StructUniqueNetIdRepl(ArkArchive archive) {
     unk = archive.getInt();
     netId = archive.getString();
   }
 
-  public StructUniqueNetIdRepl(JsonValue v, ArkName structType) {
-    super(structType);
-
-    JsonObject object = (JsonObject)v;
+  public StructUniqueNetIdRepl(JsonValue v) {
+    JsonObject object = (JsonObject) v;
 
     unk = object.getInt("unk", 0);
     netId = object.getString("netId", "");

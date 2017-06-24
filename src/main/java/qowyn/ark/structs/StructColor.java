@@ -7,47 +7,40 @@ import javax.json.JsonValue;
 
 import qowyn.ark.ArkArchive;
 import qowyn.ark.JsonHelper;
-import qowyn.ark.types.ArkName;
 
 /**
  * Essentially FColor
+ * 
  * @author Roland Firmont
  *
  */
 public class StructColor extends StructBase {
-  
+
   private byte b;
-  
+
   private byte g;
-  
+
   private byte r;
-  
+
   private byte a;
-  
-  public StructColor(ArkName structType) {
-    super(structType);
-  }
-  
-  public StructColor(ArkName structType, byte b, byte g, byte r, byte a) {
-    super(structType);
+
+  public StructColor() {}
+
+  public StructColor(byte b, byte g, byte r, byte a) {
     this.b = b;
     this.g = g;
     this.r = r;
     this.a = a;
   }
 
-  public StructColor(ArkArchive archive, ArkName structType) {
-    super(structType);
-
+  public StructColor(ArkArchive archive) {
     b = archive.getByte();
     g = archive.getByte();
     r = archive.getByte();
     a = archive.getByte();
   }
 
-  public StructColor(JsonValue v, ArkName structType) {
-    super(structType);
-
+  public StructColor(JsonValue v) {
     JsonObject o = (JsonObject) v;
 
     b = (byte) o.getInt("b", 0);
@@ -59,31 +52,31 @@ public class StructColor extends StructBase {
   public byte getB() {
     return b;
   }
-  
+
   public void setB(byte b) {
     this.b = b;
   }
-  
+
   public byte getG() {
     return g;
   }
-  
+
   public void setG(byte g) {
     this.g = g;
   }
-  
+
   public byte getR() {
     return r;
   }
-  
+
   public void setR(byte r) {
     this.r = r;
   }
-  
+
   public byte getA() {
     return a;
   }
-  
+
   public void setA(byte a) {
     this.a = a;
   }

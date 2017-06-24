@@ -4,19 +4,22 @@ import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.types.ArkName;
 
 public class PropertyInt8 extends PropertyBase<Byte> {
 
-  public PropertyInt8(String name, String typeName, byte value) {
-    super(name, typeName, 0, value);
+  public static final ArkName TYPE = ArkName.constantPlain("Int8Property");
+
+  public PropertyInt8(String name, byte value) {
+    super(ArkName.from(name), 0, value);
   }
 
-  public PropertyInt8(String name, String typeName, int index, byte value) {
-    super(name, typeName, index, value);
+  public PropertyInt8(String name, int index, byte value) {
+    super(ArkName.from(name), index, value);
   }
 
-  public PropertyInt8(ArkArchive archive, PropertyArgs args) {
-    super(archive, args);
+  public PropertyInt8(ArkArchive archive, ArkName name) {
+    super(archive, name);
     value = archive.getByte();
   }
 
@@ -31,13 +34,8 @@ public class PropertyInt8 extends PropertyBase<Byte> {
   }
 
   @Override
-  public Byte getValue() {
-    return value;
-  }
-
-  @Override
-  public void setValue(Byte value) {
-    this.value = value;
+  public ArkName getType() {
+    return TYPE;
   }
 
   @Override

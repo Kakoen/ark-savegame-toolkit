@@ -21,7 +21,7 @@ public class ArkCloudInventory implements PropertyContainer, GameObjectContainer
 
   private int inventoryVersion;
 
-  private final List<GameObject> objects = new ArrayList<>();
+  private final ArrayList<GameObject> objects = new ArrayList<>();
 
   private GameObject inventoryData;
 
@@ -61,7 +61,7 @@ public class ArkCloudInventory implements PropertyContainer, GameObjectContainer
   public void readBinary(ArkArchive archive) {
     inventoryVersion = archive.getInt();
 
-    if (inventoryVersion > 3) {
+    if (inventoryVersion != 1 && inventoryVersion != 3) {
       throw new UnsupportedOperationException("Unknown Cloud Inventory Version " + inventoryVersion);
     }
 
@@ -173,7 +173,7 @@ public class ArkCloudInventory implements PropertyContainer, GameObjectContainer
     this.inventoryVersion = inventoryVersion;
   }
 
-  public List<GameObject> getObjects() {
+  public ArrayList<GameObject> getObjects() {
     return objects;
   }
 

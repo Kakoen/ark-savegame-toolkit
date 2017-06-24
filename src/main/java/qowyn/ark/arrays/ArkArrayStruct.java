@@ -6,71 +6,74 @@ import java.util.Set;
 import javax.json.Json;
 import javax.json.JsonArray;
 import javax.json.JsonArrayBuilder;
+import javax.json.JsonValue;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.properties.PropertyArray;
 import qowyn.ark.structs.Struct;
-import qowyn.ark.structs.StructPropertyList;
 import qowyn.ark.structs.StructRegistry;
 import qowyn.ark.types.ArkName;
 
 public class ArkArrayStruct extends ArrayList<Struct> implements ArkArray<Struct> {
 
-  /**
-   * 
-   */
+  public static final ArkName TYPE = ArkName.constantPlain("StructProperty");
+
   private static final long serialVersionUID = 1L;
+
+  private static final ArkName COLOR = ArkName.constantPlain("Color");
+
+  private static final ArkName VECTOR = ArkName.constantPlain("Vector");
+
+  private static final ArkName LINEAR_COLOR = ArkName.constantPlain("LinearColor");
 
   public ArkArrayStruct() {}
 
-  public ArkArrayStruct(ArkArchive archive, int dataSize) {
+  public ArkArrayStruct(ArkArchive archive, PropertyArray property) {
     int size = archive.getInt();
-    
-    ArkName structType;
-    if (size * 4 + 4 == dataSize) {
-      structType = new ArkName("Color");
-    } else if (size * 12 + 4 == dataSize) {
-      structType = new ArkName("Vector");
-    } else if (size * 16 + 4 == dataSize) {
-      structType = new ArkName("LinearColor");
-    } else {
-      structType = null;
+
+    ArkName structType = StructRegistry.mapArrayNameToTypeName(property.getName());
+    if (structType == null) {
+      if (size * 4 + 4 == property.getDataSize()) {
+        structType = COLOR;
+      } else if (size * 12 + 4 == property.getDataSize()) {
+        structType = VECTOR;
+      } else if (size * 16 + 4 == property.getDataSize()) {
+        structType = LINEAR_COLOR;
+      }
     }
 
-    if (structType != null) {
-      for (int n = 0; n < size; n++) {
-        add(StructRegistry.read(archive, structType));
-      }
-    } else {
-      for (int n = 0; n < size; n++) {
-        add(new StructPropertyList(archive, null));
-      }
+    for (int n = 0; n < size; n++) {
+      add(StructRegistry.read(archive, structType));
     }
   }
 
-  public ArkArrayStruct(JsonArray a, int dataSize) {
-    int size = a.size();
-    
-    ArkName structType;
-    if (size * 4 + 4 == dataSize) {
-      structType = new ArkName("Color");
-    } else if (size * 12 + 4 == dataSize) {
-      structType = new ArkName("Vector");
-    } else if (size * 16 + 4 == dataSize) {
-      structType = new ArkName("LinearColor");
-    } else {
-      structType = null;
+  public ArkArrayStruct(JsonArray a, PropertyArray property) {
+    int size = property.getDataSize();
+
+    ArkName structType = StructRegistry.mapArrayNameToTypeName(property.getName());
+    if (structType == null) {
+      if (size * 4 + 4 == property.getDataSize()) {
+        structType = COLOR;
+      } else if (size * 12 + 4 == property.getDataSize()) {
+        structType = VECTOR;
+      } else if (size * 16 + 4 == property.getDataSize()) {
+        structType = LINEAR_COLOR;
+      }
     }
 
-    if (structType != null) {
-      a.forEach(o -> this.add(StructRegistry.read(o, structType)));
-    } else {
-      a.forEach(o -> this.add(new StructPropertyList(o, null)));
+    for (JsonValue v : a) {
+      add(StructRegistry.read(v, structType));
     }
   }
 
   @Override
   public Class<Struct> getValueClass() {
     return Struct.class;
+  }
+
+  @Override
+  public ArkName getType() {
+    return TYPE;
   }
 
   @Override
