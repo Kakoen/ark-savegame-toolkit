@@ -1,9 +1,12 @@
 package qowyn.ark.properties;
 
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
+import java.io.IOException;
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.types.ArkName;
 
 public class PropertyBool extends PropertyBase<Boolean> {
@@ -23,9 +26,9 @@ public class PropertyBool extends PropertyBase<Boolean> {
     value = archive.getByte() != 0;
   }
 
-  public PropertyBool(JsonObject o) {
-    super(o);
-    value = o.getBoolean("value");
+  public PropertyBool(JsonNode node) {
+    super(node);
+    value = node.path("value").asBoolean();
   }
 
   @Override
@@ -39,22 +42,21 @@ public class PropertyBool extends PropertyBase<Boolean> {
   }
 
   @Override
-  protected void serializeValue(JsonObjectBuilder job) {
-    job.add("value", value);
+  protected void writeJsonValue(JsonGenerator generator) throws IOException {
+    generator.writeBooleanField("value", value);
   }
-
   @Override
-  protected void writeValue(ArkArchive archive) {
+  protected void writeBinaryValue(ArkArchive archive) {
     archive.putByte((byte) (value ? 1 : 0));
   }
 
   @Override
-  protected int calculateAdditionalSize(boolean nameTable) {
+  protected int calculateAdditionalSize(NameSizeCalculator nameSizer) {
     return 1; // Special case: value of PropertyBool is not considered "data"
   }
 
   @Override
-  public int calculateDataSize(boolean nameTable) {
+  public int calculateDataSize(NameSizeCalculator nameSizer) {
     return 0;
   }
 

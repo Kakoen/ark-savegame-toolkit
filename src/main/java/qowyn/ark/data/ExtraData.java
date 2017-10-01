@@ -1,15 +1,18 @@
 package qowyn.ark.data;
 
-import javax.json.JsonValue;
+import java.io.IOException;
+
+import com.fasterxml.jackson.core.JsonGenerator;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.NameSizeCalculator;
 
 public interface ExtraData {
 
-  public int calculateSize(boolean nameTable);
+  public int calculateSize(NameSizeCalculator nameSizer);
 
-  public JsonValue toJson();
+  public void writeJson(JsonGenerator generator) throws IOException;
 
-  public void write(ArkArchive archive);
+  public void writeBinary(ArkArchive archive);
 
 }

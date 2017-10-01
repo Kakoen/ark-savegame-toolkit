@@ -1,21 +1,15 @@
 package qowyn.ark;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonArrayBuilder;
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
-import javax.json.JsonString;
-import javax.json.JsonValue;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.data.ExtraData;
 import qowyn.ark.data.ExtraDataBlob;
@@ -32,7 +26,7 @@ public class GameObject implements PropertyContainer, NameContainer {
 
   private static final UUID NULL_UUID = UUID.fromString(NULL_UUID_STRING);
 
-  private static final Map<LongLong, UUID> UUID_CACHE = new ConcurrentHashMap<>();
+  private static final Map<UUID, UUID> uuidCache = new ConcurrentHashMap<>();
 
   private int id;
 
@@ -42,7 +36,7 @@ public class GameObject implements PropertyContainer, NameContainer {
 
   private boolean item;
 
-  private List<ArkName> names;
+  private List<ArkName> names = new ArrayList<>();
 
   private boolean fromDataFile;
 
@@ -50,24 +44,33 @@ public class GameObject implements PropertyContainer, NameContainer {
 
   private LocationData locationData;
 
+  /**
+   * Cached propertiesSize, avoids calculating the size of properties twice
+   */
+  protected int propertiesSize;
+
   protected int propertiesOffset;
 
   protected List<Property<?>> properties = new ArrayList<>();
 
   protected ExtraData extraData;
 
+  protected GameObject parent;
+
+  protected Map<ArkName, GameObject> components = new LinkedHashMap<>();
+
   public GameObject() {}
 
   public GameObject(ArkArchive archive) {
-    read(archive);
+    readBinary(archive);
   }
 
-  public GameObject(JsonObject o) {
-    this(o, true);
+  public GameObject(JsonNode node) {
+    this(node, true);
   }
 
-  public GameObject(JsonObject o, boolean loadProperties) {
-    fromJson(o, loadProperties);
+  public GameObject(JsonNode node, boolean loadProperties) {
+    readJson(node, loadProperties);
   }
 
   public int getId() {
@@ -146,8 +149,9 @@ public class GameObject implements PropertyContainer, NameContainer {
     return properties;
   }
 
+  @Override
   public void setProperties(List<Property<?>> properties) {
-    this.properties = Objects.requireNonNull(properties);
+    this.properties = properties;
   }
 
   public ExtraData getExtraData() {
@@ -162,111 +166,130 @@ public class GameObject implements PropertyContainer, NameContainer {
     archive.position(propertiesBlockOffset + propertiesOffset);
 
     if (properties != null) {
-      properties.forEach(p -> p.write(archive));
+      properties.forEach(p -> p.writeBinary(archive));
     }
 
     archive.putName(ArkName.NAME_NONE);
 
     if (extraData != null) {
-      extraData.write(archive);
+      extraData.writeBinary(archive);
+    } else {
+      throw new UnsupportedOperationException("Cannot write binary data without known extra data");
     }
   }
 
-  public void fromJson(JsonObject o, boolean loadProperties) {
-    uuid = UUID.fromString(o.getString("uuid", NULL_UUID_STRING));
-    className = ArkName.from(o.getString("class", ""));
-    item = o.getBoolean("item", false);
+  public void readJson(JsonNode node, boolean loadProperties) {
+    
+    uuid = uuidCache.computeIfAbsent(UUID.fromString(node.path("uuid").asText(NULL_UUID_STRING)), uuid -> uuid);
+    className = ArkName.from(node.path("class").asText());
+    item = node.path("item").asBoolean();
 
-    JsonArray nameArray = o.getJsonArray("names");
-    if (nameArray != null) {
-      names = nameArray.getValuesAs(JsonString.class).stream().map(s -> ArkName.from(s.getString())).collect(Collectors.toList());
+    names.clear();
+    if (node.hasNonNull("names")) {
+      for (JsonNode nameNode: node.get("names")) {
+        names.add(ArkName.from(nameNode.asText()));
+      }
     }
 
-    fromDataFile = o.getBoolean("fromDataFile", false);
-    dataFileIndex = o.getInt("dataFileIndex", 0);
+    fromDataFile = node.path("fromDataFile").asBoolean();
+    dataFileIndex = node.path("dataFileIndex").asInt();
 
-    JsonObject locData = o.getJsonObject("location");
-    if (locData != null) {
-      locationData = new LocationData(locData);
+    if (node.hasNonNull("location")) {
+      locationData = new LocationData(node.get("location"));
+    } else {
+      locationData = null;
     }
 
+    properties.clear();
     if (loadProperties) {
-      JsonArray propertiesArray = o.getJsonArray("properties");
-      if (propertiesArray != null) {
-        properties = propertiesArray.getValuesAs(JsonObject.class).parallelStream().map(PropertyRegistry::fromJSON).collect(Collectors.toList());
+      if (node.hasNonNull("properties")) {
+        for (JsonNode propertyNode: node.get("properties")) {
+          properties.add(PropertyRegistry.readJson(propertyNode));
+        }
       }
 
-      JsonValue extra = o.get("extra");
-      if (extra != null) {
-        extraData = ExtraDataRegistry.getExtraData(this, extra);
+      if (node.has("extra")) {
+        extraData = ExtraDataRegistry.getExtraData(this, node.get("extra"));
+      } else {
+        extraData = null;
       }
+    } else {
+      extraData = null;
     }
   }
 
-  public JsonObject toJson() {
-    return toJson(false);
+  public void writeJson(JsonGenerator generator) throws IOException {
+    writeJson(generator, false);
   }
 
-  public JsonObject toJson(boolean withId) {
-    JsonObjectBuilder job = Json.createObjectBuilder();
+  public void writeJson(JsonGenerator generator, boolean withId) throws IOException {
+    generator.writeStartObject();
 
     if (withId) {
-      job.add("id", id);
+      generator.writeNumberField("id", id);
     }
 
     if (uuid != null && !uuid.equals(NULL_UUID)) {
-      job.add("uuid", uuid.toString());
+      generator.writeStringField("uuid", uuid.toString());
     }
 
     if (className != null) {
-      job.add("class", className.toString());
+      generator.writeStringField("class", className.toString());
     }
 
     if (item) {
-      job.add("item", item);
+      generator.writeBooleanField("item", item);
     }
 
     if (names != null && names.size() > 0) {
-      JsonArrayBuilder namesArray = Json.createArrayBuilder();
-      names.stream().map(ArkName::toString).forEachOrdered(namesArray::add);
+      generator.writeArrayFieldStart("names");
 
-      job.add("names", namesArray);
+      for (ArkName name: names) {
+        generator.writeString(name.toString());
+      }
+
+      generator.writeEndArray();
     }
 
     if (fromDataFile) {
-      job.add("fromDataFile", fromDataFile);
+      generator.writeBooleanField("fromDataFile", fromDataFile);
     }
 
     if (dataFileIndex != 0) {
-      job.add("dataFileIndex", dataFileIndex);
+      generator.writeNumberField("dataFileIndex", dataFileIndex);
     }
 
     if (locationData != null) {
-      job.add("location", locationData.toJson());
+      generator.writeFieldName("location");
+      locationData.writeJson(generator);
     }
 
     if (properties != null && !properties.isEmpty()) {
-      JsonArrayBuilder propsBuilder = Json.createArrayBuilder();
-      properties.stream().map(Property::toJson).forEach(propsBuilder::add);
+      generator.writeArrayFieldStart("properties");
 
-      job.add("properties", propsBuilder);
+      for (Property<?> property: properties) {
+        property.writeJson(generator);
+      }
+
+      generator.writeEndArray();
     }
 
     if (extraData != null) {
-      job.add("extra", extraData.toJson());
+      generator.writeFieldName("extra");
+      extraData.writeJson(generator);
     }
 
-    return job.build();
+    generator.writeEndObject();
   }
 
-  public int getSize(boolean nameTable) {
+  public int getSize(NameSizeCalculator nameSizer) {
     // UUID item names.size() unkBool unkIndex (locationData!=null) propertiesOffset unkInt
     int size = 16 + Integer.BYTES * 7;
 
-    size += ArkArchive.getNameLength(className, nameTable);
+    size += nameSizer.sizeOf(className);
 
     if (names != null) {
-      size += names.stream().mapToInt(n -> ArkArchive.getNameLength(n, nameTable)).sum();
+      size += names.stream().mapToInt(nameSizer::sizeOf).sum();
     }
 
     if (locationData != null) {
@@ -276,32 +299,44 @@ public class GameObject implements PropertyContainer, NameContainer {
     return size;
   }
 
-  public int getPropertiesSize(boolean nameTable) {
-    int size = ArkArchive.getNameLength(ArkName.NAME_NONE, nameTable);
+  /**
+   * Calculates the size of the property block and caches the resulting value
+   * @param nameSizer
+   * @return
+   */
+  public int getPropertiesSize(NameSizeCalculator nameSizer) {
+    int size = nameSizer.sizeOf(ArkName.NAME_NONE);
 
-    size += properties.stream().mapToInt(p -> p.calculateSize(nameTable)).sum();
+    size += properties.stream().mapToInt(p -> p.calculateSize(nameSizer)).sum();
 
     if (extraData != null) {
-      size += extraData.calculateSize(nameTable);
+      size += extraData.calculateSize(nameSizer);
+    } else {
+      throw new UnsupportedOperationException("Cannot write binary data without known extra data");
     }
 
+    propertiesSize = size;
     return size;
   }
 
-  public void read(ArkArchive archive) {
-    long uuidMostSig = archive.getLong();
-    long uuidLeastSig = archive.getLong();
+  public void readBinary(ArkArchive archive) {
+    long highOfHigh = archive.getInt();
+    long lowOfHigh = archive.getInt();
+    long high = (highOfHigh << 32) + lowOfHigh;
+    long highOfLow = archive.getInt();
+    long lowOfLow = archive.getInt();
+    long low = (highOfLow << 32) + lowOfLow;
 
-    uuid = UUID_CACHE.computeIfAbsent(new LongLong(uuidMostSig, uuidLeastSig), ll -> new UUID(ll.getHigh(), ll.getLow()));
+    uuid = uuidCache.computeIfAbsent(new UUID(high, low), uuid -> uuid);
 
     className = archive.getName();
 
     item = archive.getBoolean();
 
-    int countNames = archive.getInt();
-    names = new ArrayList<>();
+    int nameCount = archive.getInt();
 
-    for (int nameIndex = 0; nameIndex < countNames; nameIndex++) {
+    names.clear();
+    for (int nameIndex = 0; nameIndex < nameCount; nameIndex++) {
       names.add(archive.getName());
     }
 
@@ -332,12 +367,12 @@ public class GameObject implements PropertyContainer, NameContainer {
 
     properties.clear();
     try {
-      Property<?> property = PropertyRegistry.readProperty(archive);
+      Property<?> property = PropertyRegistry.readBinary(archive);
 
       while (property != null) {
         position = archive.position();
         properties.add(property);
-        property = PropertyRegistry.readProperty(archive);
+        property = PropertyRegistry.readBinary(archive);
       }
     } catch (UnreadablePropertyException upe) {
       archive.unknownNames();
@@ -361,7 +396,7 @@ public class GameObject implements PropertyContainer, NameContainer {
     }
   }
 
-  public int write(ArkArchive archive, int offset) {
+  public int writeBinary(ArkArchive archive, int offset) {
     if (uuid != null) {
       archive.putLong(uuid.getMostSignificantBits());
       archive.putLong(uuid.getLeastSignificantBits());
@@ -385,7 +420,7 @@ public class GameObject implements PropertyContainer, NameContainer {
 
     if (locationData != null) {
       archive.putBoolean(true);
-      locationData.write(archive);
+      locationData.writeBinary(archive);
     } else {
       archive.putBoolean(false);
     }
@@ -394,21 +429,72 @@ public class GameObject implements PropertyContainer, NameContainer {
     archive.putInt(propertiesOffset);
     archive.putInt(0);
 
-    return offset + getPropertiesSize(archive.hasNameTable());
+    return offset + propertiesSize;
   }
 
-  public void collectNames(Set<String> nameTable) {
-    nameTable.add(className.getName());
+  @Override
+  public void collectNames(NameCollector collector) {
+    collector.accept(className);
 
     if (names != null) {
-      names.forEach(name -> nameTable.add(name.getName()));
+      names.forEach(name -> collector.accept(name));
     }
 
-    properties.forEach(property -> property.collectNames(nameTable));
+    properties.forEach(property -> property.collectNames(collector));
+    collector.accept(ArkName.NAME_NONE);
 
     if (extraData instanceof NameContainer) {
-      ((NameContainer) extraData).collectNames(nameTable);
+      ((NameContainer) extraData).collectNames(collector);
     }
+  }
+
+  public void collectBaseNames(NameCollector collector) {
+    collector.accept(className);
+
+    if (names != null) {
+      names.forEach(name -> collector.accept(name));
+    }
+  }
+
+  public void collectPropertyNames(NameCollector collector) {
+    properties.forEach(property -> property.collectNames(collector));
+    collector.accept(ArkName.NAME_NONE);
+
+    if (extraData instanceof NameContainer) {
+      ((NameContainer) extraData).collectNames(collector);
+    }
+  }
+
+  public GameObject getParent() {
+    return parent;
+  }
+
+  public void setParent(GameObject parent) {
+    this.parent = parent;
+  }
+
+  public Map<ArkName, GameObject> getComponents() {
+    return components;
+  }
+
+  public void setComponents(Map<ArkName, GameObject> components) {
+    this.components = components;
+  }
+
+  public void addComponent(GameObject component) {
+    this.components.put(component.getNames().get(0), component);
+  }
+
+  public boolean hasParentNames() {
+    return names.size() > 1;
+  }
+
+  public List<ArkName> getParentNames() {
+    return names.subList(1, names.size());
+  }
+
+  public static void clearUUIDCache() {
+    uuidCache.clear();
   }
 
 }

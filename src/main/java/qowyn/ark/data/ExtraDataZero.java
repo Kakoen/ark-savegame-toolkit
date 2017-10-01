@@ -1,23 +1,26 @@
 package qowyn.ark.data;
 
-import javax.json.JsonValue;
+import java.io.IOException;
+
+import com.fasterxml.jackson.core.JsonGenerator;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.NameSizeCalculator;
 
 public class ExtraDataZero implements ExtraData {
 
   @Override
-  public int calculateSize(boolean nameTable) {
+  public int calculateSize(NameSizeCalculator nameSizer) {
     return 4;
   }
 
   @Override
-  public JsonValue toJson() {
-    return JsonValue.NULL;
+  public void writeJson(JsonGenerator generator) throws IOException {
+    generator.writeNull();
   }
 
   @Override
-  public void write(ArkArchive archive) {
+  public void writeBinary(ArkArchive archive) {
     archive.putInt(0);
   }
 

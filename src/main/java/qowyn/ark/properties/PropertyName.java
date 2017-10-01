@@ -1,11 +1,13 @@
 package qowyn.ark.properties;
 
-import java.util.Set;
+import java.io.IOException;
 
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.NameCollector;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.types.ArkName;
 
 public class PropertyName extends PropertyBase<ArkName> {
@@ -25,9 +27,9 @@ public class PropertyName extends PropertyBase<ArkName> {
     value = archive.getName();
   }
 
-  public PropertyName(JsonObject o) {
-    super(o);
-    value = ArkName.from(o.getString("value"));
+  public PropertyName(JsonNode node) {
+    super(node);
+    value = ArkName.from(node.path("value").asText());
   }
 
   @Override
@@ -41,24 +43,24 @@ public class PropertyName extends PropertyBase<ArkName> {
   }
 
   @Override
-  protected void serializeValue(JsonObjectBuilder job) {
-    job.add("value", value.toString());
+  protected void writeJsonValue(JsonGenerator generator) throws IOException {
+    generator.writeStringField("value", value.toString());
   }
 
   @Override
-  protected void writeValue(ArkArchive archive) {
+  protected void writeBinaryValue(ArkArchive archive) {
     archive.putName(value);
   }
 
   @Override
-  public int calculateDataSize(boolean nameTable) {
-    return ArkArchive.getNameLength(value, nameTable);
+  public int calculateDataSize(NameSizeCalculator nameSizer) {
+    return nameSizer.sizeOf(value);
   }
 
   @Override
-  public void collectNames(Set<String> nameTable) {
-    super.collectNames(nameTable);
-    nameTable.add(value.getName());
+  public void collectNames(NameCollector collector) {
+    super.collectNames(collector);
+    collector.accept(value);
   }
 
 }

@@ -1,14 +1,14 @@
 package qowyn.ark.arrays;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Set;
 
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonArrayBuilder;
-import javax.json.JsonString;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.NameCollector;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.properties.PropertyArray;
 import qowyn.ark.types.ArkName;
 
@@ -28,12 +28,12 @@ public class ArkArrayString extends ArrayList<String> implements ArkArray<String
     }
   }
 
-  public ArkArrayString(JsonArray a, PropertyArray property) {
-    a.getValuesAs(JsonString.class).forEach(s -> this.add(s.getString()));
+  public ArkArrayString(JsonNode node, PropertyArray property) {
+    node.forEach(n -> this.add(n.textValue()));
   }
 
   @Override
-  public void collectNames(Set<String> nameTable) {}
+  public void collectNames(NameCollector collector) {}
 
   @Override
   public Class<String> getValueClass() {
@@ -46,7 +46,7 @@ public class ArkArrayString extends ArrayList<String> implements ArkArray<String
   }
 
   @Override
-  public int calculateSize(boolean nameTable) {
+  public int calculateSize(NameSizeCalculator nameSizer) {
     int size = Integer.BYTES;
 
     size += stream().mapToInt(ArkArchive::getStringLength).sum();
@@ -55,16 +55,18 @@ public class ArkArrayString extends ArrayList<String> implements ArkArray<String
   }
 
   @Override
-  public JsonArray toJson() {
-    JsonArrayBuilder jab = Json.createArrayBuilder();
+  public void writeJson(JsonGenerator generator) throws IOException {
+    generator.writeStartArray(size());
 
-    this.forEach(jab::add);
+    for (String value: this) {
+      generator.writeString(value);
+    }
 
-    return jab.build();
+    generator.writeEndArray();
   }
 
   @Override
-  public void write(ArkArchive archive) {
+  public void writeBinary(ArkArchive archive) {
     archive.putInt(size());
 
     this.forEach(archive::putString);

@@ -4,26 +4,20 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.Paths;
+import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonArrayBuilder;
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
-import javax.json.JsonString;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.properties.Property;
+import qowyn.ark.types.ArkName;
 
-public class ArkLocalProfile implements PropertyContainer, GameObjectContainer {
-
-  private static final Base64.Encoder ENCODER = Base64.getEncoder();
-
-  private static final Base64.Decoder DECODER = Base64.getDecoder();
+public class ArkLocalProfile extends FileFormatBase implements PropertyContainer, GameObjectContainerMixin {
 
   private static final int UNKNOWN_DATA_2_SIZE = 0xc;
 
@@ -35,60 +29,52 @@ public class ArkLocalProfile implements PropertyContainer, GameObjectContainer {
 
   private final ArrayList<GameObject> objects = new ArrayList<>();
 
+  private final Map<Integer, Map<List<ArkName>, GameObject>> objectMap = new HashMap<>();
+
   private GameObject localProfile;
 
   public ArkLocalProfile() {}
 
-  public ArkLocalProfile(String fileName) throws FileNotFoundException, IOException {
-    this(fileName, new ReadingOptions());
+  public ArkLocalProfile(Path filePath) throws IOException {
+    readBinary(filePath);
   }
 
-  public ArkLocalProfile(String fileName, ReadingOptions options) throws FileNotFoundException, IOException {
-    try (FileChannel fc = FileChannel.open(Paths.get(fileName), StandardOpenOption.READ)) {
-      if (fc.size() > Integer.MAX_VALUE) {
-        throw new RuntimeException("Input file is too large.");
-      }
-      ByteBuffer buffer;
-      if (options.usesMemoryMapping()) {
-        buffer = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size());
-      } else {
-        buffer = ByteBuffer.allocateDirect((int) fc.size());
-        int bytesRead = fc.read(buffer);
-        int totalRead = bytesRead;
-        while (bytesRead != -1 && totalRead < fc.size()) {
-          bytesRead = fc.read(buffer);
-          totalRead += bytesRead;
-        }
-        buffer.clear();
-      }
-      ArkArchive archive = new ArkArchive(buffer);
-      readBinary(archive);
-    }
+  public ArkLocalProfile(Path filePath, ReadingOptions options) throws IOException {
+    readBinary(filePath, options);
   }
 
-  public ArkLocalProfile(JsonObject object) {
-    readJson(object);
+  public ArkLocalProfile(JsonNode node) {
+    readJson(node);
   }
 
-  public void readBinary(ArkArchive archive) {
+  public ArkLocalProfile(JsonNode node, ReadingOptions options) {
+    readJson(node, options);
+  }
+
+  @Override
+  public void readBinary(ArkArchive archive, ReadingOptions options) {
     localProfileVersion = archive.getInt();
 
-    if (localProfileVersion != 1 && localProfileVersion != 3) {
+    if (localProfileVersion != 1 && localProfileVersion != 3 && localProfileVersion != 4) {
       throw new UnsupportedOperationException("Unknown Profile Version " + localProfileVersion);
     }
 
-    int unknownDataSize = archive.getInt();
+    if (localProfileVersion < 4) {
+      int unknownDataSize = archive.getInt();
 
-    unknownData = archive.getBytes(unknownDataSize);
+      unknownData = archive.getBytes(unknownDataSize);
 
-    if (localProfileVersion == 3) {
-      unknownData2 = archive.getBytes(UNKNOWN_DATA_2_SIZE);
+      if (localProfileVersion == 3) {
+        unknownData2 = archive.getBytes(UNKNOWN_DATA_2_SIZE);
+      }
     }
 
     int objectCount = archive.getInt();
 
+    objects.clear();
+    objectMap.clear();
     for (int i = 0; i < objectCount; i++) {
-      objects.add(new GameObject(archive));
+      addObject(new GameObject(archive), options.getBuildComponentTree());
     }
 
     for (int i = 0; i < objectCount; i++) {
@@ -100,36 +86,41 @@ public class ArkLocalProfile implements PropertyContainer, GameObjectContainer {
     }
   }
 
-  public void writeBinary(String fileName) throws FileNotFoundException, IOException {
-    writeBinary(fileName, WritingOptions.create());
-  }
+  @Override
+  public void writeBinary(Path filePath, WritingOptions options) throws FileNotFoundException, IOException {
+    int size;
 
-  public void writeBinary(String fileName, WritingOptions options) throws FileNotFoundException, IOException {
-    if (localProfileVersion == 3) {
-      if (unknownData2 == null) {
-        unknownData2 = new byte[UNKNOWN_DATA_2_SIZE];
-      } else if (unknownData2.length < UNKNOWN_DATA_2_SIZE) {
-        byte[] temp = new byte[UNKNOWN_DATA_2_SIZE];
-        System.arraycopy(unknownData2, 0, temp, 0, unknownData2.length);
-        unknownData2 = temp;
+    if (localProfileVersion > 3) {
+      size = Integer.BYTES * 2;
+    } else {
+      size = Integer.BYTES * 3;
+
+      if (localProfileVersion == 3) {
+        if (unknownData2 == null) {
+          unknownData2 = new byte[UNKNOWN_DATA_2_SIZE];
+        } else if (unknownData2.length < UNKNOWN_DATA_2_SIZE) {
+          byte[] temp = new byte[UNKNOWN_DATA_2_SIZE];
+          System.arraycopy(unknownData2, 0, temp, 0, unknownData2.length);
+          unknownData2 = temp;
+        }
+      }
+
+      size += unknownData.length;
+
+      if (localProfileVersion == 3) {
+        size += UNKNOWN_DATA_2_SIZE;
       }
     }
 
-    int size = Integer.BYTES * 3;
+    NameSizeCalculator nameSizer = ArkArchive.getNameSizer(false);
 
-    size += unknownData.length;
-
-    if (localProfileVersion == 3) {
-      size += 12;
-    }
-
-    size += objects.stream().mapToInt(object -> object.getSize(false)).sum();
+    size += objects.stream().mapToInt(object -> object.getSize(nameSizer)).sum();
 
     int propertiesBlockOffset = size;
 
-    size += objects.stream().mapToInt(object -> object.getPropertiesSize(false)).sum();
+    size += objects.stream().mapToInt(object -> object.getPropertiesSize(nameSizer)).sum();
 
-    try (FileChannel fc = FileChannel.open(Paths.get(fileName), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+    try (FileChannel fc = FileChannel.open(filePath, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
       ByteBuffer buffer;
 
       if (options.usesMemoryMapping()) {
@@ -138,21 +129,23 @@ public class ArkLocalProfile implements PropertyContainer, GameObjectContainer {
         buffer = ByteBuffer.allocateDirect(size);
       }
 
-      ArkArchive archive = new ArkArchive(buffer);
+      ArkArchive archive = new ArkArchive(buffer, filePath);
 
       archive.putInt(localProfileVersion);
 
-      archive.putInt(unknownData.length);
-      archive.putBytes(unknownData);
+      if (localProfileVersion < 4) {
+        archive.putInt(unknownData.length);
+        archive.putBytes(unknownData);
 
-      if (localProfileVersion == 3) {
-        archive.putBytes(unknownData2, 0, UNKNOWN_DATA_2_SIZE);
+        if (localProfileVersion == 3) {
+          archive.putBytes(unknownData2, 0, UNKNOWN_DATA_2_SIZE);
+        }
       }
 
       archive.putInt(objects.size());
 
       for (GameObject object : objects) {
-        propertiesBlockOffset = object.write(archive, propertiesBlockOffset);
+        propertiesBlockOffset = object.writeBinary(archive, propertiesBlockOffset);
       }
 
       for (GameObject object : objects) {
@@ -171,57 +164,74 @@ public class ArkLocalProfile implements PropertyContainer, GameObjectContainer {
     }
   }
 
-  public void readJson(JsonObject object) {
-    localProfileVersion = object.getInt("localProfileVersion");
-    objects.clear();
+  @Override
+  public void readJson(JsonNode node, ReadingOptions options) {
+    localProfileVersion = node.path("localProfileVersion").asInt();
 
-    JsonObject profile = object.getJsonObject("localProfile");
-    if (profile != null) {
-      setLocalProfile(new GameObject(profile));
+    objects.clear();
+    objectMap.clear();
+    if (node.hasNonNull("localProfile")) {
+      addObject(new GameObject(node.get("localProfile")), options.getBuildComponentTree());
+      localProfile = objects.get(0);
     }
 
-    JsonArray profileObjects = object.getJsonArray("objects");
-    if (profileObjects != null) {
-      for (JsonObject profileObject : profileObjects.getValuesAs(JsonObject.class)) {
-        objects.add(new GameObject(profileObject));
+    if (node.hasNonNull("objects")) {
+      for (JsonNode objectNode : node.get("objects")) {
+        addObject(new GameObject(objectNode), options.getBuildComponentTree());
       }
     }
 
-    JsonString unknownDataString = object.getJsonString("unknownData");
-    if (unknownDataString != null) {
-      unknownData = DECODER.decode(unknownDataString.getString());
+    JsonNode unknownDataString = node.path("unknownData");
+    if (unknownDataString.isBinary()) {
+      try {
+        unknownData = unknownDataString.binaryValue();
+      } catch (IOException ex) {
+        throw new RuntimeException(ex);
+      }
     }
 
-    JsonString unknownData2String = object.getJsonString("unknownData2");
-    if (unknownData2String != null) {
-      unknownData2 = DECODER.decode(unknownData2String.getString());
+    JsonNode unknownData2String = node.path("unknownData2");
+    if (unknownData2String.isBinary()) {
+      try {
+        unknownData2 = unknownData2String.binaryValue();
+      } catch (IOException ex) {
+        throw new RuntimeException(ex);
+      }
     }
   }
 
-  public JsonObject toJson() {
-    JsonObjectBuilder job = Json.createObjectBuilder();
+  @Override
+  public void writeJson(JsonGenerator generator, WritingOptions options) throws IOException {
+    generator.writeStartObject();
 
-    job.add("localProfileVersion", localProfileVersion);
-    job.add("localProfile", localProfile.toJson());
+    generator.writeNumberField("localProfileVersion", localProfileVersion);
+    generator.writeFieldName("localProfile");
+    if (localProfile != null) {
+      localProfile.writeJson(generator, true);
+    } else {
+      generator.writeNull();
+    }
 
-    if (objects.size() > 1) {
-      JsonArrayBuilder additionalObjects = Json.createArrayBuilder();
+    if (objects.size() > (localProfile == null ? 0 : 1)) {
+      generator.writeArrayFieldStart("objects");
       for (GameObject object : objects) {
         if (object == localProfile) {
           continue;
         }
 
-        additionalObjects.add(object.toJson());
+        object.writeJson(generator, true);
       }
-      job.add("objects", additionalObjects.build());
+      generator.writeEndArray();
     }
 
-    job.add("unknownData", ENCODER.encodeToString(unknownData));
+    if (unknownData != null) {
+      generator.writeBinaryField("unknownData", unknownData);
+    }
     if (unknownData2 != null) {
-      job.add("unknownData2", ENCODER.encodeToString(unknownData2));
+      generator.writeBinaryField("unknownData2", unknownData2);
     }
 
-    return job.build();
+    generator.writeEndObject();
   }
 
   public int getLocalProfileVersion() {
@@ -232,8 +242,14 @@ public class ArkLocalProfile implements PropertyContainer, GameObjectContainer {
     this.localProfileVersion = localProfileVersion;
   }
 
+  @Override
   public ArrayList<GameObject> getObjects() {
     return objects;
+  }
+
+  @Override
+  public Map<Integer, Map<List<ArkName>, GameObject>> getObjectMap() {
+    return objectMap;
   }
 
   public GameObject getLocalProfile() {

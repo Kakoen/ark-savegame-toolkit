@@ -4,61 +4,49 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.Paths;
+import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonArrayBuilder;
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.properties.Property;
+import qowyn.ark.types.ArkName;
 
-public class ArkTribe implements PropertyContainer, GameObjectContainer {
+public class ArkTribe extends FileFormatBase implements PropertyContainer, GameObjectContainerMixin {
 
   private int tribeVersion;
 
   private final ArrayList<GameObject> objects = new ArrayList<>();
 
+  private final Map<Integer, Map<List<ArkName>, GameObject>> objectMap = new HashMap<>();
+
   private GameObject tribe;
 
   public ArkTribe() {}
 
-  public ArkTribe(String fileName) throws FileNotFoundException, IOException {
-    this(fileName, new ReadingOptions());
+  public ArkTribe(Path filePath) throws IOException {
+    readBinary(filePath);
   }
 
-  public ArkTribe(String fileName, ReadingOptions options) throws FileNotFoundException, IOException {
-    try (FileChannel fc = FileChannel.open(Paths.get(fileName), StandardOpenOption.READ)) {
-      if (fc.size() > Integer.MAX_VALUE) {
-        throw new RuntimeException("Input file is too large.");
-      }
-      ByteBuffer buffer;
-      if (options.usesMemoryMapping()) {
-        buffer = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size());
-      } else {
-        buffer = ByteBuffer.allocateDirect((int) fc.size());
-        int bytesRead = fc.read(buffer);
-        int totalRead = bytesRead;
-        while (bytesRead != -1 && totalRead < fc.size()) {
-          bytesRead = fc.read(buffer);
-          totalRead += bytesRead;
-        }
-        buffer.clear();
-      }
-      ArkArchive archive = new ArkArchive(buffer);
-      readBinary(archive);
-    }
+  public ArkTribe(Path filePath, ReadingOptions options) throws IOException {
+    readBinary(filePath, options);
   }
 
-  public ArkTribe(JsonObject object) {
-    readJson(object);
+  public ArkTribe(JsonNode node) {
+    readJson(node);
   }
 
-  public void readBinary(ArkArchive archive) {
+  public ArkTribe(JsonNode node, ReadingOptions options) {
+    readJson(node, options);
+  }
+
+  @Override
+  public void readBinary(ArkArchive archive, ReadingOptions options) {
     tribeVersion = archive.getInt();
 
     if (tribeVersion != 1) {
@@ -67,8 +55,10 @@ public class ArkTribe implements PropertyContainer, GameObjectContainer {
 
     int tribesCount = archive.getInt();
 
+    objects.clear();
+    objectMap.clear();
     for (int i = 0; i < tribesCount; i++) {
-      objects.add(new GameObject(archive));
+      addObject(new GameObject(archive), options.getBuildComponentTree());
     }
 
     for (int i = 0; i < tribesCount; i++) {
@@ -80,20 +70,19 @@ public class ArkTribe implements PropertyContainer, GameObjectContainer {
     }
   }
 
-  public void writeBinary(String fileName) throws FileNotFoundException, IOException {
-    writeBinary(fileName, WritingOptions.create());
-  }
-
-  public void writeBinary(String fileName, WritingOptions options) throws FileNotFoundException, IOException {
+  @Override
+  public void writeBinary(Path filePath, WritingOptions options) throws FileNotFoundException, IOException {
     int size = Integer.BYTES * 2;
 
-    size += objects.stream().mapToInt(object -> object.getSize(false)).sum();
+    NameSizeCalculator nameSizer = ArkArchive.getNameSizer(false);
+
+    size += objects.stream().mapToInt(object -> object.getSize(nameSizer)).sum();
 
     int propertiesBlockOffset = size;
 
-    size += objects.stream().mapToInt(object -> object.getPropertiesSize(false)).sum();
+    size += objects.stream().mapToInt(object -> object.getPropertiesSize(nameSizer)).sum();
 
-    try (FileChannel fc = FileChannel.open(Paths.get(fileName), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+    try (FileChannel fc = FileChannel.open(filePath, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
       ByteBuffer buffer;
 
       if (options.usesMemoryMapping()) {
@@ -102,13 +91,13 @@ public class ArkTribe implements PropertyContainer, GameObjectContainer {
         buffer = ByteBuffer.allocateDirect(size);
       }
 
-      ArkArchive archive = new ArkArchive(buffer);
+      ArkArchive archive = new ArkArchive(buffer, filePath);
 
       archive.putInt(tribeVersion);
       archive.putInt(objects.size());
 
       for (GameObject object : objects) {
-        propertiesBlockOffset = object.write(archive, propertiesBlockOffset);
+        propertiesBlockOffset = object.writeBinary(archive, propertiesBlockOffset);
       }
 
       for (GameObject object : objects) {
@@ -127,42 +116,49 @@ public class ArkTribe implements PropertyContainer, GameObjectContainer {
     }
   }
 
-  public void readJson(JsonObject object) {
-    tribeVersion = object.getInt("tribeVersion");
-    objects.clear();
+  @Override
+  public void readJson(JsonNode node, ReadingOptions options) {
+    tribeVersion = node.path("tribeVersion").asInt();
 
-    JsonObject tribe = object.getJsonObject("tribe");
-    if (tribe != null) {
-      setTribe(new GameObject(tribe));
+    objects.clear();
+    objectMap.clear();
+    if (node.hasNonNull("tribe")) {
+      addObject(new GameObject(node.get("tribe")), options.getBuildComponentTree());
+      tribe = objects.get(0);
     }
 
-    JsonArray tribeObjects = object.getJsonArray("objects");
-    if (tribeObjects != null) {
-      for (JsonObject tribeObject : tribeObjects.getValuesAs(JsonObject.class)) {
-        objects.add(new GameObject(tribeObject));
+    if (node.hasNonNull("objects")) {
+      for (JsonNode objectNode : node.get("objects")) {
+        addObject(new GameObject(objectNode), options.getBuildComponentTree());
       }
     }
   }
 
-  public JsonObject toJson() {
-    JsonObjectBuilder job = Json.createObjectBuilder();
+  @Override
+  public void writeJson(JsonGenerator generator, WritingOptions options) throws IOException {
+    generator.writeStartObject();
 
-    job.add("tribeVersion", tribeVersion);
-    job.add("tribe", tribe.toJson());
+    generator.writeNumberField("tribeVersion", tribeVersion);
+    generator.writeFieldName("tribe");
+    if (tribe != null) {
+      tribe.writeJson(generator, true);
+    } else {
+      generator.writeNull();
+    }
 
-    if (objects.size() > 1) {
-      JsonArrayBuilder additionalObjects = Json.createArrayBuilder();
+    if (objects.size() > (tribe == null ? 0 : 1)) {
+      generator.writeArrayFieldStart("objects");
       for (GameObject object : objects) {
         if (object == tribe) {
           continue;
         }
 
-        additionalObjects.add(object.toJson());
+        object.writeJson(generator, true);
       }
-      job.add("objects", additionalObjects.build());
+      generator.writeEndArray();
     }
 
-    return job.build();
+    generator.writeEndObject();
   }
 
   public int getTribeVersion() {
@@ -173,8 +169,14 @@ public class ArkTribe implements PropertyContainer, GameObjectContainer {
     this.tribeVersion = tribeVersion;
   }
 
+  @Override
   public ArrayList<GameObject> getObjects() {
     return objects;
+  }
+
+  @Override
+  public Map<Integer, Map<List<ArkName>, GameObject>> getObjectMap() {
+    return objectMap;
   }
 
   public GameObject getTribe() {

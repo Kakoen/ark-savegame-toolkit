@@ -1,13 +1,13 @@
 package qowyn.ark.properties;
 
-import java.util.Set;
+import java.io.IOException;
 
-import javax.json.Json;
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
-import qowyn.ark.JsonHelper;
+import qowyn.ark.NameCollector;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.types.ArkName;
 
 public abstract class PropertyBase<T> implements Property<T> {
@@ -32,10 +32,10 @@ public abstract class PropertyBase<T> implements Property<T> {
     index = archive.getInt();
   }
 
-  public PropertyBase(JsonObject o) {
-    name = ArkName.from(o.getString("name"));
-    dataSize = o.getInt("size", 0);
-    index = o.getInt("index", 0);
+  public PropertyBase(JsonNode node) {
+    name = ArkName.from(node.get("name").asText());
+    dataSize = node.path("size").asInt();
+    index = node.path("index").asInt();
   }
 
   @Override
@@ -89,27 +89,47 @@ public abstract class PropertyBase<T> implements Property<T> {
    * @param nameTable
    * @return
    */
-  protected int calculateAdditionalSize(boolean nameTable) {
+  protected int calculateAdditionalSize(NameSizeCalculator nameSizer) {
     return 0;
   }
 
+  /**
+   * Side-effect: calling this function will change the value of the dataSize field.
+   * This makes sure that the value can be used by the write function without having to calculate it twice
+   * @param nameSizer
+   * @return
+   */
   @Override
-  public int calculateSize(boolean nameTable) {
+  public int calculateSize(NameSizeCalculator nameSizer) {
     // dataSize index
     int size = Integer.BYTES * 2;
+    dataSize = calculateDataSize(nameSizer);
 
-    size += ArkArchive.getNameLength(name, nameTable);
-    size += ArkArchive.getNameLength(getType(), nameTable);
-    size += calculateAdditionalSize(nameTable);
-    size += calculateDataSize(nameTable);
+    size += nameSizer.sizeOf(name);
+    size += nameSizer.sizeOf(getType());
+    size += calculateAdditionalSize(nameSizer);
+    size += dataSize;
 
     return size;
   }
 
-  protected abstract void serializeValue(JsonObjectBuilder job);
+  protected abstract void writeBinaryValue(ArkArchive archive);
+
+  @Override
+  public void writeBinary(ArkArchive archive) {
+    archive.putName(name);
+    archive.putName(getType());
+    archive.putInt(dataSize);
+    archive.putInt(index);
+
+    writeBinaryValue(archive);
+  }
+
+  protected abstract void writeJsonValue(JsonGenerator generator) throws IOException;
 
   /**
    * Determines if the dataSize cannot be calculated and thus needs to be recorded.
+   * Used when writing the JSON representation of the property
    * 
    * @return <tt>true</tt> if dataSize needs to be recorded
    */
@@ -118,36 +138,27 @@ public abstract class PropertyBase<T> implements Property<T> {
   }
 
   @Override
-  public JsonObject toJson() {
-    JsonObjectBuilder job = Json.createObjectBuilder();
+  public void writeJson(JsonGenerator generator) throws IOException {
+    generator.writeStartObject();
 
-    job.add("name", name.toString());
-    job.add("type", getType().toString());
-    if (isDataSizeNeeded()) {
-      JsonHelper.addInt(job, "size", dataSize);
+    generator.writeStringField("name", name.toString());
+    generator.writeStringField("type", getType().toString());
+    if (isDataSizeNeeded() && dataSize != 0) {
+      generator.writeNumberField("size", dataSize);
     }
-    JsonHelper.addInt(job, "index", index);
+    if (index != 0) {
+      generator.writeNumberField("index", index);
+    }
 
-    serializeValue(job);
+    writeJsonValue(generator);
 
-    return job.build();
+    generator.writeEndObject();
   }
-
-  protected abstract void writeValue(ArkArchive archive);
 
   @Override
-  public void write(ArkArchive archive) {
-    archive.putName(name);
-    archive.putName(getType());
-    archive.putInt(calculateDataSize(archive.hasNameTable()));
-    archive.putInt(index);
-
-    writeValue(archive);
-  }
-
-  public void collectNames(Set<String> nameTable) {
-    nameTable.add(name.getName());
-    nameTable.add(getType().getName());
+  public void collectNames(NameCollector collector) {
+    collector.accept(name);
+    collector.accept(getType());
   }
 
   @Override

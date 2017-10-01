@@ -4,24 +4,20 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.Paths;
+import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonArrayBuilder;
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.properties.Property;
 import qowyn.ark.properties.PropertyRegistry;
 import qowyn.ark.properties.UnreadablePropertyException;
 import qowyn.ark.types.ArkName;
 
-public class ArkSavFile implements PropertyContainer {
+public class ArkSavFile extends FileFormatBase implements PropertyContainer {
 
   private String className;
 
@@ -29,47 +25,33 @@ public class ArkSavFile implements PropertyContainer {
 
   public ArkSavFile() {}
 
-  public ArkSavFile(String fileName) throws FileNotFoundException, IOException {
-    this(fileName, new ReadingOptions());
+  public ArkSavFile(Path filePath) throws IOException {
+    readBinary(filePath);
   }
 
-  public ArkSavFile(String fileName, ReadingOptions options) throws FileNotFoundException, IOException {
-    try (FileChannel fc = FileChannel.open(Paths.get(fileName), StandardOpenOption.READ)) {
-      if (fc.size() > Integer.MAX_VALUE) {
-        throw new RuntimeException("Input file is too large.");
-      }
-      ByteBuffer buffer;
-      if (options.usesMemoryMapping()) {
-        buffer = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size());
-      } else {
-        buffer = ByteBuffer.allocateDirect((int) fc.size());
-        int bytesRead = fc.read(buffer);
-        int totalRead = bytesRead;
-        while (bytesRead != -1 && totalRead < fc.size()) {
-          bytesRead = fc.read(buffer);
-          totalRead += bytesRead;
-        }
-        buffer.clear();
-      }
-      ArkArchive archive = new ArkArchive(buffer);
-      readBinary(archive);
-    }
+  public ArkSavFile(Path filePath, ReadingOptions options) throws IOException {
+    readBinary(filePath, options);
   }
 
-  public ArkSavFile(JsonObject object) {
-    readJson(object);
+  public ArkSavFile(JsonNode node) {
+    readJson(node);
   }
 
-  public void readBinary(ArkArchive archive) {
+  public ArkSavFile(JsonNode node, ReadingOptions options) {
+    readJson(node, options);
+  }
+
+  @Override
+  public void readBinary(ArkArchive archive, ReadingOptions options) {
     className = archive.getString();
 
     properties.clear();
     try {
-      Property<?> property = PropertyRegistry.readProperty(archive);
+      Property<?> property = PropertyRegistry.readBinary(archive);
 
       while (property != null) {
         properties.add(property);
-        property = PropertyRegistry.readProperty(archive);
+        property = PropertyRegistry.readBinary(archive);
       }
     } catch (UnreadablePropertyException upe) {
       upe.printStackTrace();
@@ -79,18 +61,17 @@ public class ArkSavFile implements PropertyContainer {
     // TODO: verify 0 int at end
   }
 
-  public void writeBinary(String fileName) throws FileNotFoundException, IOException {
-    writeBinary(fileName, WritingOptions.create());
-  }
-
-  public void writeBinary(String fileName, WritingOptions options) throws FileNotFoundException, IOException {
+  @Override
+  public void writeBinary(Path filePath, WritingOptions options) throws FileNotFoundException, IOException {
     int size = Integer.BYTES + ArkArchive.getStringLength(className);
 
-    size += ArkArchive.getNameLength(ArkName.NAME_NONE, false);
+    NameSizeCalculator nameSizer = ArkArchive.getNameSizer(false);
 
-    size += properties.stream().mapToInt(p -> p.calculateSize(false)).sum();
+    size += nameSizer.sizeOf(ArkName.NAME_NONE);
 
-    try (FileChannel fc = FileChannel.open(Paths.get(fileName), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+    size += properties.stream().mapToInt(p -> p.calculateSize(nameSizer)).sum();
+
+    try (FileChannel fc = FileChannel.open(filePath, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
       ByteBuffer buffer;
 
       if (options.usesMemoryMapping()) {
@@ -99,12 +80,12 @@ public class ArkSavFile implements PropertyContainer {
         buffer = ByteBuffer.allocateDirect(size);
       }
 
-      ArkArchive archive = new ArkArchive(buffer);
+      ArkArchive archive = new ArkArchive(buffer, filePath);
 
       archive.putString(className);
 
       if (properties != null) {
-        properties.forEach(p -> p.write(archive));
+        properties.forEach(p -> p.writeBinary(archive));
       }
 
       archive.putName(ArkName.NAME_NONE);
@@ -122,30 +103,35 @@ public class ArkSavFile implements PropertyContainer {
     }
   }
 
-  public void readJson(JsonObject object) {
-    className = object.getString("className");
+  @Override
+  public void readJson(JsonNode node, ReadingOptions options) {
+    className = node.path("className").asText();
 
-    JsonArray propertiesArray = object.getJsonArray("properties");
-    if (propertiesArray != null) {
-      properties = propertiesArray.getValuesAs(JsonObject.class).parallelStream().map(PropertyRegistry::fromJSON).collect(Collectors.toList());
-    } else {
-      properties = new ArrayList<>();
+    properties.clear();
+    if (node.hasNonNull("properties")) {
+      for (JsonNode propertyNode: node.get("properties")) {
+        properties.add(PropertyRegistry.readJson(propertyNode));
+      }
     }
   }
 
-  public JsonObject toJson() {
-    JsonObjectBuilder job = Json.createObjectBuilder();
+  @Override
+  public void writeJson(JsonGenerator generator, WritingOptions options) throws IOException {
+    generator.writeStartObject();
 
-    job.add("className", className);
+    generator.writeStringField("className", className);
 
-    if (properties != null && !properties.isEmpty()) {
-      JsonArrayBuilder propsBuilder = Json.createArrayBuilder();
-      properties.stream().map(Property::toJson).forEach(propsBuilder::add);
+    if (!properties.isEmpty()) {
+      generator.writeArrayFieldStart("properties");
 
-      job.add("properties", propsBuilder);
+      for (Property<?> property: properties) {
+        property.writeJson(generator);
+      }
+
+      generator.writeEndArray();
     }
 
-    return job.build();
+    generator.writeEndObject();
   }
 
   @Override

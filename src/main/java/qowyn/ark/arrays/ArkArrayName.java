@@ -1,14 +1,14 @@
 package qowyn.ark.arrays;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Set;
 
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonArrayBuilder;
-import javax.json.JsonString;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.NameCollector;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.properties.PropertyArray;
 import qowyn.ark.types.ArkName;
 
@@ -28,8 +28,8 @@ public class ArkArrayName extends ArrayList<ArkName> implements ArkArray<ArkName
     }
   }
 
-  public ArkArrayName(JsonArray a, PropertyArray property) {
-    a.getValuesAs(JsonString.class).forEach(s -> this.add(ArkName.from(s.getString())));
+  public ArkArrayName(JsonNode node, PropertyArray property) {
+    node.forEach(n -> this.add(ArkName.from(n.asText())));
   }
 
   @Override
@@ -43,33 +43,35 @@ public class ArkArrayName extends ArrayList<ArkName> implements ArkArray<ArkName
   }
 
   @Override
-  public int calculateSize(boolean nameTable) {
+  public int calculateSize(NameSizeCalculator nameSizer) {
     int size = Integer.BYTES;
 
-    size += stream().mapToInt(n -> ArkArchive.getNameLength(n, nameTable)).sum();
+    size += stream().mapToInt(nameSizer::sizeOf).sum();
 
     return size;
   }
 
   @Override
-  public JsonArray toJson() {
-    JsonArrayBuilder jab = Json.createArrayBuilder();
+  public void writeJson(JsonGenerator generator) throws IOException {
+    generator.writeStartArray(size());
 
-    this.forEach(n -> jab.add(n.toString()));
+    for (ArkName value: this) {
+      generator.writeString(value.toString());
+    }
 
-    return jab.build();
+    generator.writeEndArray();
   }
 
   @Override
-  public void write(ArkArchive archive) {
+  public void writeBinary(ArkArchive archive) {
     archive.putInt(size());
 
     this.forEach(archive::putName);
   }
 
   @Override
-  public void collectNames(Set<String> nameTable) {
-    forEach(n -> nameTable.add(n.getName()));
+  public void collectNames(NameCollector collector) {
+    forEach(collector::accept);
   }
 
 }

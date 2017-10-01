@@ -1,17 +1,14 @@
 package qowyn.ark.data;
 
-import java.util.Base64;
+import java.io.IOException;
 
-import javax.json.JsonString;
-import javax.json.JsonValue;
-import javax.json.JsonValue.ValueType;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
 import qowyn.ark.GameObject;
+import qowyn.ark.LoggerHelper;
 
 public class ExtraDataFallbackHandler implements ExtraDataHandler {
-
-  private static final Base64.Decoder DECODER = Base64.getDecoder();
 
   @Override
   public boolean canHandle(GameObject object, int length) {
@@ -19,14 +16,15 @@ public class ExtraDataFallbackHandler implements ExtraDataHandler {
   }
 
   @Override
-  public boolean canHandle(GameObject object, JsonValue value) {
-    return value != null && value.getValueType() == ValueType.STRING;
+  public boolean canHandle(GameObject object, JsonNode node) {
+    return node.isBinary();
   }
 
   @Override
-  public ExtraData read(GameObject object, ArkArchive archive, int length) {
+  public ExtraData readBinary(GameObject object, ArkArchive archive, int length) {
     ExtraDataBlob extraData = new ExtraDataBlob();
 
+    archive.debugMessage(LoggerHelper.format("Unknown extended data for %s with length %d", object.getClassString(), length));
     extraData.setData(archive.getBytes(length));
     archive.unknownNames();
 
@@ -34,11 +32,13 @@ public class ExtraDataFallbackHandler implements ExtraDataHandler {
   }
 
   @Override
-  public ExtraData read(GameObject object, JsonValue value) {
-    JsonString valueString = (JsonString) value;
-
+  public ExtraData readJson(GameObject object, JsonNode node) {
     ExtraDataBlob extraData = new ExtraDataBlob();
-    extraData.setData(DECODER.decode(valueString.getString()));
+    try {
+      extraData.setData(node.binaryValue());
+    } catch (IOException ex) {
+      throw new RuntimeException(ex);
+    }
 
     return extraData;
   }

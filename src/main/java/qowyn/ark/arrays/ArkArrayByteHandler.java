@@ -1,7 +1,6 @@
 package qowyn.ark.arrays;
 
-import javax.json.JsonArray;
-import javax.json.JsonValue.ValueType;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
 import qowyn.ark.properties.PropertyArray;
@@ -24,16 +23,16 @@ public class ArkArrayByteHandler {
     if (property.getDataSize() > size + 4) {
       return new ArkArrayByteValue(archive, property);
     } else {
-      return new ArkArrayInt8(archive, property);
+      return new ArkArrayUInt8(archive, property);
     }
   }
 
-  public static ArkArray<?> create(JsonArray a, PropertyArray property) {
+  public static ArkArray<?> create(JsonNode node, PropertyArray property) {
     // Enum version will have null as first element
-    if (a.size() > 0 && a.get(0).getValueType() == ValueType.NULL) {
-      return new ArkArrayByteValue(a, property);
+    if (node.size() > 0 && node.get(0).isNull()) {
+      return new ArkArrayByteValue(node, property);
     } else {
-      return new ArkArrayInt8(a, property);
+      return new ArkArrayUInt8(node, property);
     }
   }
 

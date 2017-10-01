@@ -21,6 +21,12 @@ public class ReadingOptions extends BaseOptions {
 
   private Predicate<GameObject> objectFilter = null;
 
+  private boolean hibernation = true;
+
+  private boolean hibernationObjectProperties = true;
+
+  private boolean buildComponentTree = false;
+
   public static ReadingOptions create() {
     return new ReadingOptions();
   }
@@ -140,6 +146,57 @@ public class ReadingOptions extends BaseOptions {
     return this;
   }
 
+  /**
+   * Whether hibernation data will be read or skipped over.
+   * 
+   * @return <tt>true</tt> if reading, <tt>false</tt> if skipping
+   */
+  public boolean getHibernation() {
+    return hibernation;
+  }
+
+  /**
+   * Sets whether hibernation data will be read or skipped over.
+   * 
+   * @param hibernation <tt>true</tt> if reading, <tt>false</tt> if skipping
+   * @return self, to continue building options using a fluent interface
+   */
+  public ReadingOptions withHibernation(boolean hibernation) {
+    this.hibernation = hibernation;
+    return this;
+  }
+
+  /**
+   * Whether hibernation {@link GameObject} properties will be read or skipped over. {@link #getHibernation()}
+   * needs to be <tt>true</tt> for this to have any effect.
+   * 
+   * @return <tt>true</tt> if reading, <tt>false</tt> if skipping
+   */
+  public boolean getHibernationObjectProperties() {
+    return hibernationObjectProperties;
+  }
+
+  /**
+   * Sets whether hibernation {@link GameObject} properties will be read or skipped over.
+   * {@link #getHibernation()} needs to be <tt>true</tt> for this to have any effect.
+   * 
+   * @param hibernationObjectProperties <tt>true</tt> if reading, <tt>false</tt> if skipping
+   * @return self, to continue building options using a fluent interface
+   */
+  public ReadingOptions withHibernationObjectProperties(boolean hibernationObjectProperties) {
+    this.hibernationObjectProperties = hibernationObjectProperties;
+    return this;
+  }
+
+  public boolean getBuildComponentTree() {
+    return buildComponentTree;
+  }
+
+  public ReadingOptions buildComponentTree(boolean buildComponentTree) {
+    this.buildComponentTree = buildComponentTree;
+    return this;
+  }
+
   @Override
   public ReadingOptions parallel(boolean parallel) {
     super.parallel(parallel);
@@ -153,8 +210,8 @@ public class ReadingOptions extends BaseOptions {
   }
 
   @Override
-  public ReadingOptions asynchronous(boolean asynchronous) {
-    super.asynchronous(asynchronous);
+  public ReadingOptions withThreadCount(int threadCount) {
+    super.withThreadCount(threadCount);
     return this;
   }
 

@@ -1,14 +1,14 @@
 package qowyn.ark.arrays;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Set;
 
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonArrayBuilder;
-import javax.json.JsonNumber;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.NameCollector;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.properties.PropertyArray;
 import qowyn.ark.types.ArkName;
 
@@ -28,8 +28,8 @@ public class ArkArrayInt extends ArrayList<Integer> implements ArkArray<Integer>
     }
   }
 
-  public ArkArrayInt(JsonArray a, PropertyArray property) {
-    a.getValuesAs(JsonNumber.class).forEach(n -> this.add(n.intValue()));
+  public ArkArrayInt(JsonNode node, PropertyArray property) {
+    node.forEach(n -> this.add(n.asInt()));
   }
 
   @Override
@@ -43,27 +43,29 @@ public class ArkArrayInt extends ArrayList<Integer> implements ArkArray<Integer>
   }
 
   @Override
-  public int calculateSize(boolean nameTable) {
+  public int calculateSize(NameSizeCalculator nameSizer) {
     return Integer.BYTES + size() * Integer.BYTES;
   }
 
   @Override
-  public JsonArray toJson() {
-    JsonArrayBuilder jab = Json.createArrayBuilder();
+  public void writeJson(JsonGenerator generator) throws IOException {
+    generator.writeStartArray(size());
 
-    this.forEach(n -> jab.add(n));
+    for (int value: this) {
+      generator.writeNumber(value);
+    }
 
-    return jab.build();
+    generator.writeEndArray();
   }
 
   @Override
-  public void write(ArkArchive archive) {
+  public void writeBinary(ArkArchive archive) {
     archive.putInt(size());
 
     this.forEach(archive::putInt);
   }
 
   @Override
-  public void collectNames(Set<String> nameTable) {}
+  public void collectNames(NameCollector collector) {}
 
 }

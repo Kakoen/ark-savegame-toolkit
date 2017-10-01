@@ -1,11 +1,13 @@
 package qowyn.ark.properties;
 
-import java.util.Set;
+import java.io.IOException;
 
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.NameCollector;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.structs.Struct;
 import qowyn.ark.structs.StructRegistry;
 import qowyn.ark.structs.StructUnknown;
@@ -33,7 +35,7 @@ public class PropertyStruct extends PropertyBase<Struct> {
 
     int position = archive.position();
     try {
-      value = StructRegistry.read(archive, structType);
+      value = StructRegistry.readBinary(archive, structType);
 
       if (value == null) {
         throw new UnreadablePropertyException("StructRegistry returned null");
@@ -49,14 +51,14 @@ public class PropertyStruct extends PropertyBase<Struct> {
     }
   }
 
-  public PropertyStruct(JsonObject o) {
-    super(o);
-    structType = ArkName.from(o.getString("structType"));
+  public PropertyStruct(JsonNode node) {
+    super(node);
+    structType = ArkName.from(node.path("structType").asText());
 
-    if (o.containsKey("unknown")) {
-      value = new StructUnknown(o.get("unknown"));
+    if (node.hasNonNull("unknown")) {
+      value = new StructUnknown(node.path("unknown"));
     } else {
-      value = StructRegistry.read(o.get("value"), structType);
+      value = StructRegistry.readJson(node.path("value"), structType);
     }
   }
 
@@ -71,36 +73,37 @@ public class PropertyStruct extends PropertyBase<Struct> {
   }
 
   @Override
-  protected void serializeValue(JsonObjectBuilder job) {
-    job.add("structType", structType.toString());
-    if (value instanceof StructUnknown) {
-      job.add("unknown", value.toJson());
-    } else {
-      job.add("value", value.toJson());
-    }
-  }
-
-  @Override
-  protected void writeValue(ArkArchive archive) {
+  protected void writeBinaryValue(ArkArchive archive) {
     archive.putName(structType);
-    value.write(archive);
+    value.writeBinary(archive);
   }
 
   @Override
-  protected int calculateAdditionalSize(boolean nameTable) {
-    return ArkArchive.getNameLength(structType, nameTable);
+  protected void writeJsonValue(JsonGenerator generator) throws IOException {
+    generator.writeStringField("structType", structType.toString());
+    if (value instanceof StructUnknown) {
+      generator.writeFieldName("unknown");
+    } else {
+      generator.writeFieldName("value");
+    }
+    value.writeJson(generator);
   }
 
   @Override
-  public int calculateDataSize(boolean nameTable) {
-    return value.getSize(nameTable);
+  protected int calculateAdditionalSize(NameSizeCalculator nameSizer) {
+    return nameSizer.sizeOf(structType);
   }
 
   @Override
-  public void collectNames(Set<String> nameTable) {
-    super.collectNames(nameTable);
-    nameTable.add(structType.getName());
-    value.collectNames(nameTable);
+  public int calculateDataSize(NameSizeCalculator nameSizer) {
+    return value.getSize(nameSizer);
+  }
+
+  @Override
+  public void collectNames(NameCollector collector) {
+    super.collectNames(collector);
+    collector.accept(structType);
+    value.collectNames(collector);
   }
 
   public ArkName getStructType() {

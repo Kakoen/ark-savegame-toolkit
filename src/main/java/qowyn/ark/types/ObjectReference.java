@@ -1,19 +1,16 @@
 package qowyn.ark.types;
 
-import java.util.Set;
+import java.io.IOException;
 
-import javax.json.Json;
-import javax.json.JsonNumber;
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
-import javax.json.JsonString;
-import javax.json.JsonValue;
-import javax.json.JsonValue.ValueType;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
 import qowyn.ark.GameObject;
 import qowyn.ark.GameObjectContainer;
+import qowyn.ark.NameCollector;
 import qowyn.ark.NameContainer;
+import qowyn.ark.NameSizeCalculator;
 
 public class ObjectReference implements NameContainer {
 
@@ -47,21 +44,12 @@ public class ObjectReference implements NameContainer {
 
   public ObjectReference(ArkArchive archive, int length) {
     this.length = length;
-    read(archive);
+    readBinary(archive);
   }
 
-  public ObjectReference(JsonObject o, int length) {
+  public ObjectReference(JsonNode node, int length) {
     this.length = length;
-    JsonValue v = o.get("value");
-    if (v.getValueType() == ValueType.NUMBER) {
-      JsonNumber n = (JsonNumber) v;
-      objectId = n.intValue();
-      objectType = TYPE_ID;
-    } else {
-      JsonString s = (JsonString) v;
-      objectString = ArkName.from(s.getString());
-      objectType = o.getBoolean("short", false) ? TYPE_PATH_NO_TYPE : TYPE_PATH;
-    }
+    readJson(node);
   }
 
   public int getLength() {
@@ -110,34 +98,45 @@ public class ObjectReference implements NameContainer {
     return null;
   }
 
-  public JsonObject toJSON() {
-    JsonObjectBuilder job = Json.createObjectBuilder();
-
-    if (objectType == TYPE_ID) {
-      job.add("value", objectId);
-    } else if (objectType == TYPE_PATH) {
-      job.add("value", objectString.toString());
-    } else if (objectType == TYPE_PATH_NO_TYPE) {
-      job.add("value", objectString.toString());
-      job.add("short", true);
+  public void readJson(JsonNode node) {
+    if (node.isNumber()) {
+      objectId = node.asInt();
+      objectType = TYPE_ID;
+    } else if (node.isTextual()) {
+      objectString = ArkName.from(node.textValue());
+      objectType = TYPE_PATH;
+    } else {
+      objectString = ArkName.from(node.path("value").asText());
+      objectType = node.path("short").asBoolean(false) ? TYPE_PATH_NO_TYPE : TYPE_PATH;
     }
-
-    return job.build();
   }
 
-  public int getSize(boolean nameTable) {
+  public void writeJson(JsonGenerator generator) throws IOException {
+    if (objectType == TYPE_ID) {
+      generator.writeNumber(objectId);
+    } else if (objectType == TYPE_PATH) {
+      generator.writeString(objectString.toString());
+    } else if (objectType == TYPE_PATH_NO_TYPE) {
+      generator.writeStartObject();
+      generator.writeStringField("value", objectString.toString());
+      generator.writeBooleanField("short", true);
+      generator.writeEndObject();
+    }
+  }
+
+  public int getSize(NameSizeCalculator nameSizer) {
     if (objectType == TYPE_ID) {
       return length;
     } else if (objectType == TYPE_PATH) {
-      return Integer.BYTES + ArkArchive.getNameLength(objectString, nameTable);
+      return Integer.BYTES + nameSizer.sizeOf(objectString);
     } else if (objectType == TYPE_PATH_NO_TYPE) {
-      return ArkArchive.getNameLength(objectString, nameTable);
+      return nameSizer.sizeOf(objectString);
     } else {
       return length;
     }
   }
 
-  public void read(ArkArchive archive) {
+  public void readBinary(ArkArchive archive) {
     if (length >= 8) {
       objectType = archive.getInt();
       if (objectType == TYPE_ID) {
@@ -158,7 +157,7 @@ public class ObjectReference implements NameContainer {
     }
   }
 
-  public void write(ArkArchive archive) {
+  public void writeBinary(ArkArchive archive) {
     if (objectType == TYPE_PATH || length >= 8 && objectType != TYPE_PATH_NO_TYPE) {
       archive.putInt(objectType);
     }
@@ -171,10 +170,18 @@ public class ObjectReference implements NameContainer {
   }
 
   @Override
-  public void collectNames(Set<String> nameTable) {
+  public void collectNames(NameCollector collector) {
     if (objectType == TYPE_PATH) {
-      nameTable.add(objectString.getName());
+      collector.accept(objectString);
     }
+  }
+
+  public boolean isId() {
+    return objectType == TYPE_ID;
+  }
+
+  public boolean isPath() {
+    return objectType != TYPE_ID;
   }
 
 }

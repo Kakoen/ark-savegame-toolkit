@@ -1,11 +1,13 @@
 package qowyn.ark.arrays;
 
+import java.io.IOException;
 import java.util.List;
 
-import javax.json.JsonValue;
+import com.fasterxml.jackson.core.JsonGenerator;
 
 import qowyn.ark.ArkArchive;
 import qowyn.ark.NameContainer;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.types.ArkName;
 
 public interface ArkArray<T> extends List<T>, NameContainer {
@@ -14,10 +16,10 @@ public interface ArkArray<T> extends List<T>, NameContainer {
 
   public ArkName getType();
 
-  public int calculateSize(boolean nameTable);
+  public int calculateSize(NameSizeCalculator nameSizer);
 
-  public JsonValue toJson();
+  public void writeJson(JsonGenerator generator) throws IOException;
 
-  public void write(ArkArchive archive);
+  public void writeBinary(ArkArchive archive);
 
 }

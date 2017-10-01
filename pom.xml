@@ -5,7 +5,7 @@
 
 	<groupId>qowyn.ark</groupId>
 	<artifactId>ark-savegame-toolkit</artifactId>
-	<version>0.7.4.1</version>
+	<version>0.8.2.1</version>
 	<packaging>jar</packaging>
 
 	<name>ARK Savegame Toolkit</name>
@@ -19,22 +19,16 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>org.glassfish</groupId>
-			<artifactId>javax.json</artifactId>
-			<version>1.0.4</version>
+		    <groupId>com.fasterxml.jackson.core</groupId>
+		    <artifactId>jackson-databind</artifactId>
+		    <version>2.9.0</version>
 		</dependency>
-
 		<dependency>
-			<groupId>com.lmax</groupId>
-			<artifactId>disruptor</artifactId>
-			<version>3.3.5</version>
+			<scope>test</scope>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>4.12</version>
 		</dependency>
-    <dependency>
-      <scope>test</scope>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>4.12</version>
-    </dependency>
   </dependencies>
 
 	<build>

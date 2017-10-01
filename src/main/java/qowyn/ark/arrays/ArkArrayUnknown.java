@@ -1,20 +1,17 @@
 package qowyn.ark.arrays;
 
+import java.io.IOException;
 import java.util.AbstractList;
-import java.util.Base64;
-import java.util.Set;
 
-import javax.json.JsonValue;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
-import qowyn.ark.json.SimpleJsonString;
+import qowyn.ark.NameCollector;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.types.ArkName;
 
 public class ArkArrayUnknown extends AbstractList<Byte> implements ArkArray<Byte> {
-
-  private static final Base64.Decoder DECODER = Base64.getDecoder();
-
-  private static final Base64.Encoder ENCODER = Base64.getEncoder();
 
   private final byte[] value;
 
@@ -25,8 +22,13 @@ public class ArkArrayUnknown extends AbstractList<Byte> implements ArkArray<Byte
     this.type = type;
   }
 
-  public ArkArrayUnknown(String v, ArkName type) {
-    value = DECODER.decode(v);
+  public ArkArrayUnknown(JsonNode node, ArkName type) {
+    try {
+      value = node.binaryValue();
+    } catch (IOException ex) {
+      throw new RuntimeException(ex);
+    }
+
     this.type = type;
   }
 
@@ -41,22 +43,22 @@ public class ArkArrayUnknown extends AbstractList<Byte> implements ArkArray<Byte
   }
 
   @Override
-  public int calculateSize(boolean nameTable) {
+  public int calculateSize(NameSizeCalculator nameSizer) {
     return value.length;
   }
 
   @Override
-  public JsonValue toJson() {
-    return new SimpleJsonString(ENCODER.encodeToString(value));
+  public void writeJson(JsonGenerator generator) throws IOException {
+    generator.writeBinary(value);
   }
 
   @Override
-  public void write(ArkArchive archive) {
+  public void writeBinary(ArkArchive archive) {
     archive.putBytes(value);
   }
 
   @Override
-  public void collectNames(Set<String> nameTable) {}
+  public void collectNames(NameCollector collector) {}
 
   @Override
   public Byte get(int index) {

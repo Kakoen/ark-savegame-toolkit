@@ -1,16 +1,14 @@
 package qowyn.ark.arrays;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Set;
 
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonArrayBuilder;
-import javax.json.JsonString;
-import javax.json.JsonValue;
-import javax.json.JsonValue.ValueType;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.NameCollector;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.properties.PropertyArray;
 import qowyn.ark.types.ArkByteValue;
 import qowyn.ark.types.ArkName;
@@ -34,12 +32,8 @@ public class ArkArrayByteValue extends ArrayList<ArkByteValue> implements ArkArr
     }
   }
 
-  public ArkArrayByteValue(JsonArray a, PropertyArray property) {
-    for (JsonValue v : a) {
-      if (v.getValueType() != ValueType.NULL) {
-        add(new ArkByteValue(ArkName.from(((JsonString) v).getString())));
-      }
-    }
+  public ArkArrayByteValue(JsonNode node, PropertyArray property) {
+    node.forEach(n -> this.add(new ArkByteValue(ArkName.from(n.asText()))));
   }
 
   @Override
@@ -53,31 +47,33 @@ public class ArkArrayByteValue extends ArrayList<ArkByteValue> implements ArkArr
   }
 
   @Override
-  public int calculateSize(boolean nameTable) {
-    return Integer.BYTES + stream().mapToInt(bv -> ArkArchive.getNameLength(bv.getNameValue(), nameTable)).sum();
+  public int calculateSize(NameSizeCalculator nameSizer) {
+    return Integer.BYTES + stream().mapToInt(bv -> nameSizer.sizeOf(bv.getNameValue())).sum();
   }
 
   @Override
-  public JsonArray toJson() {
-    JsonArrayBuilder jab = Json.createArrayBuilder();
+  public void writeJson(JsonGenerator generator) throws IOException {
+    generator.writeStartArray(size() + 1);
 
     // Marker
-    jab.addNull();
-    this.forEach(bv -> jab.add(bv.getNameValue().toString()));
+    generator.writeNull();
+    for (ArkByteValue value: this) {
+      generator.writeString(value.getNameValue().toString());
+    }
 
-    return jab.build();
+    generator.writeEndArray();
   }
 
   @Override
-  public void write(ArkArchive archive) {
+  public void writeBinary(ArkArchive archive) {
     archive.putInt(size());
 
     this.forEach(bv -> archive.putName(bv.getNameValue()));
   }
 
   @Override
-  public void collectNames(Set<String> nameTable) {
-    this.forEach(bv -> nameTable.add(bv.getNameValue().getName()));
+  public void collectNames(NameCollector collector) {
+    this.forEach(bv -> collector.accept(bv.getNameValue()));
   }
 
 }

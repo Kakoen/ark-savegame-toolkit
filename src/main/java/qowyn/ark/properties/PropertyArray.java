@@ -1,12 +1,13 @@
 package qowyn.ark.properties;
 
-import java.util.Set;
+import java.io.IOException;
 
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
-import javax.json.JsonValue.ValueType;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import qowyn.ark.ArkArchive;
+import qowyn.ark.NameCollector;
+import qowyn.ark.NameSizeCalculator;
 import qowyn.ark.arrays.ArkArray;
 import qowyn.ark.arrays.ArkArrayRegistry;
 import qowyn.ark.arrays.ArkArrayStruct;
@@ -32,7 +33,7 @@ public class PropertyArray extends PropertyBase<ArkArray<?>> {
     int position = archive.position();
 
     try {
-      value = ArkArrayRegistry.read(archive, arrayType, this);
+      value = ArkArrayRegistry.readBinary(archive, arrayType, this);
 
       if (value == null) {
         throw new UnreadablePropertyException("ArkArrayRegistry returned null");
@@ -48,14 +49,14 @@ public class PropertyArray extends PropertyBase<ArkArray<?>> {
     }
   }
 
-  public PropertyArray(JsonObject o) {
-    super(o);
-    ArkName arrayType = ArkName.from(o.getString("arrayType"));
+  public PropertyArray(JsonNode node) {
+    super(node);
+    ArkName arrayType = ArkName.from(node.path("arrayType").asText());
 
-    if (o.get("value").getValueType() == ValueType.STRING) {
-      value = new ArkArrayUnknown(o.getString("value"), arrayType);
+    if (node.path("value").isBinary()) {
+      value = new ArkArrayUnknown(node.path("value"), arrayType);
     } else {
-      value = ArkArrayRegistry.read(o.getJsonArray("value"), arrayType, this);
+      value = ArkArrayRegistry.readJson(node.path("value"), arrayType, this);
     }
   }
 
@@ -81,32 +82,33 @@ public class PropertyArray extends PropertyBase<ArkArray<?>> {
   }
 
   @Override
-  protected void serializeValue(JsonObjectBuilder job) {
-    job.add("arrayType", value.getType().toString());
-    job.add("value", value.toJson());
-  }
-
-  @Override
-  protected void writeValue(ArkArchive archive) {
+  protected void writeBinaryValue(ArkArchive archive) {
     archive.putName(value.getType());
-    value.write(archive);
+    value.writeBinary(archive);
   }
 
   @Override
-  protected int calculateAdditionalSize(boolean nameTable) {
-    return ArkArchive.getNameLength(value.getType(), nameTable);
+  protected void writeJsonValue(JsonGenerator generator) throws IOException {
+    generator.writeStringField("arrayType", value.getType().toString());
+    generator.writeFieldName("value");
+    value.writeJson(generator);
   }
 
   @Override
-  public int calculateDataSize(boolean nameTable) {
-    return value.calculateSize(nameTable);
+  protected int calculateAdditionalSize(NameSizeCalculator nameSizer) {
+    return nameSizer.sizeOf(value.getType());
   }
 
   @Override
-  public void collectNames(Set<String> nameTable) {
-    super.collectNames(nameTable);
-    nameTable.add(value.getType().getName());
-    value.collectNames(nameTable);
+  public int calculateDataSize(NameSizeCalculator nameSizer) {
+    return value.calculateSize(nameSizer);
+  }
+
+  @Override
+  public void collectNames(NameCollector collector) {
+    super.collectNames(collector);
+    collector.accept(value.getType());
+    value.collectNames(collector);
   }
 
   @Override
