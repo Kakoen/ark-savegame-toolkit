@@ -42,15 +42,21 @@ public class ArkContainer extends FileFormatBase implements GameObjectContainerM
     readJson(node, options);
   }
 
+  public ArkContainer(ByteBuffer source) {
+    ArkArchive archive = new ArkArchive(source);
+    readBinary(archive, new ReadingOptions());
+  }
+
   public ArkContainer(ArkArrayUInt8 source) {
+    this(constructByteBuffer(source));
+  }
+
+  private static ByteBuffer constructByteBuffer(ArkArrayUInt8 source) {
     ByteBuffer buffer = ByteBuffer.allocateDirect(source.size());
-
     source.forEach(buffer::put);
-
     buffer.clear();
 
-    ArkArchive archive = new ArkArchive(buffer);
-    readBinary(archive, new ReadingOptions());
+    return buffer;
   }
 
   public ArkContainer(ArkArrayInt8 source) {
